@@ -38,7 +38,7 @@ function loadSettings(): AppSettings {
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
     const configuredEndpoint = typeof value.endpoint === "string" ? value.endpoint.trim() : "";
     const endpoint = configuredEndpoint === "https://app.forge/api" ? defaultSettings.endpoint : configuredEndpoint;
-    return { endpoint: isDev && endpoint ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
+    return { endpoint: isDev && endpoint ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme, modelProviderId: typeof value.modelProviderId === "string" && value.modelProviderId.trim() ? value.modelProviderId : undefined };
   } catch { return settings; }
 }
 

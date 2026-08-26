@@ -1,5 +1,5 @@
 export type ThemePreference = "light" | "dark" | "system";
-export type AppSettings = { endpoint: string; dashboardUrl?: string; theme: ThemePreference; notifications: boolean };
+export type AppSettings = { endpoint: string; dashboardUrl?: string; theme: ThemePreference; notifications: boolean; modelProviderId?: string };
 export interface SelectedAttachment { id: string; name: string; size: number; mediaType: string }
 export interface DesktopNotification { title: string; body: string }
 export interface CloudRequest { method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE"; path: string; body?: unknown }

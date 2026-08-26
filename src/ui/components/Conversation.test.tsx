@@ -19,4 +19,11 @@ describe("Conversation states", () => {
     expect(screen.getByRole("heading", { name: "Atlas", level: 2 })).toBeInTheDocument();
     expect(screen.queryByText("Find the signal")).not.toBeInTheDocument();
   });
+
+  it("shows a streaming indicator before the first agent token arrives", () => {
+    const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
+    const { container } = render(<MessageView message={message} activities={[]} onReact={async () => undefined} />);
+    expect(container.querySelector(".streaming-caret")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark as useful" })).not.toBeInTheDocument();
+  });
 });

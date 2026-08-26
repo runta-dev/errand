@@ -3,13 +3,25 @@ import { CrewError, type Agent, type ApprovalRequest, type CloudComputer, type C
 import type { CloudRequest } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number }
-interface RuntaRun { id: string; agent_id: string; status: string; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string; updated_at?: string }
+interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 const status = (value: string): Agent["status"] => value === "running" ? "idle" : value === "pending" ? "working" : "offline";
+const terminalRunStatuses = new Set(["finished", "failed", "cancelled"]);
+
+function runMessages(run: RuntaRun, id: string): Message[] {
+  const createdAt = run.created_at ?? new Date().toISOString();
+  const updatedAt = run.updated_at ?? createdAt;
+  const user = run.prompt ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: run.prompt }], createdAt }] : [];
+  if (run.status === "failed" || run.status === "cancelled") {
+    const detail = run.error?.trim() || (run.status === "cancelled" ? "Run cancelled." : "Run failed.");
+    return [...user, { id: `${run.id}:agent`, conversationId: id, role: "system", parts: [{ type: "text", text: detail }], createdAt: updatedAt }];
+  }
+  return [...user, { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result ?? "" }], createdAt: updatedAt, streaming: !terminalRunStatuses.has(run.status) }];
+}
 
 export class RuntaCloudAgentsClient implements CloudAgentsClient {
   private async request<T>(request: CloudRequest): Promise<T> {
@@ -58,7 +70,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     void _signal;
     const agentId = agentIdFromConversation(id);
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
-    const messages = runs.slice().reverse().flatMap<Message>((run) => run.result ? [{ id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result }], createdAt: run.updated_at ?? new Date().toISOString(), streaming: !["finished", "failed", "cancelled"].includes(run.status) }] : []);
+    const messages = runs.slice().reverse().flatMap((run) => runMessages(run, id));
     return { conversation: { id, agentId, title: "Agent conversation", updatedAt: runs[0]?.updated_at ?? new Date().toISOString() }, messages };
   }
   async sendMessage(input: SendMessageInput): Promise<Message> {
@@ -75,9 +87,15 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       try {
         const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
         for (const run of runs) {
-          const previous = observed.get(run.id); observed.set(run.id, run.status);
-          if (previous === undefined && run.result) listener({ type: "message.created", message: { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result }], createdAt: run.updated_at ?? new Date().toISOString(), streaming: false } });
-          if (previous && previous !== run.status && run.status === "finished") listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
+          const previous = observed.get(run.id); observed.set(run.id, signature);
+          if (previous === undefined) {
+            for (const message of runMessages(run, id)) listener({ type: "message.created", message });
+          } else if (previous !== signature) {
+            const agentMessage = runMessages(run, id).find((message) => message.id === `${run.id}:agent`);
+            if (agentMessage) listener({ type: "message.updated", message: agentMessage });
+          }
+          if (previous !== signature && terminalRunStatuses.has(run.status)) listener({ type: "message.completed", messageId: `${run.id}:agent` });
         }
         listener({ type: "connection.changed", state: "connected" });
       } catch { listener({ type: "connection.changed", state: "error" }); }

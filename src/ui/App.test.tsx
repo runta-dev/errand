@@ -3,11 +3,20 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
 import { accountDisplayName } from "./accountDisplayName";
+import { nextAgentName } from "@/domain/agentName";
 import { AgentList } from "./components/AgentList";
 import { LoginPage } from "./components/LoginPage";
 import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew authentication surfaces", () => {
+  it("assigns unique single names before deterministic word pairs", () => {
+    const used: string[] = [];
+    for (let index = 0; index < 18; index += 1) { const name = nextAgentName(used); expect(used.map((value) => value.toLowerCase())).not.toContain(name.toLowerCase()); used.push(name); }
+    expect(used.slice(0, 3)).toEqual(["Atlas", "Scout", "Mira"]);
+    expect(used[16]).toBe("Amber Brook");
+    expect(used[17]).toBe("Amber Cedar");
+    expect(nextAgentName(["atlas"])).toBe("Scout");
+  });
   it("derives a human account name from the authorized profile", () => {
     expect(accountDisplayName({ email: "shiqi@runta.com" })).toBe("Shiqi");
     expect(accountDisplayName({ email: "shiqi.mei@runta.com" })).toBe("Shiqi Mei");
