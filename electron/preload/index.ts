@@ -17,6 +17,12 @@ const bridge: DesktopBridge = {
     show: (notification) => ipcRenderer.invoke("notifications:show", notification),
     setBadge: (count) => ipcRenderer.invoke("notifications:setBadge", count),
   },
+  deepLinks: {
+    onOpenAgent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, agentId: string) => listener(agentId);
+      ipcRenderer.on("deep-link:agent", handler); return () => ipcRenderer.removeListener("deep-link:agent", handler);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("runtaCrew", bridge);

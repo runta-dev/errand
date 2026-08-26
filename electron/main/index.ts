@@ -4,11 +4,23 @@ import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AppSettings } from "../../src/shared/desktop";
 
-const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
+const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
 let settings: AppSettings = { endpoint: "", theme: "light", notifications: true };
 const selectedAttachmentPaths = new Map<string, string>();
+let mainWindow: BrowserWindow | undefined;
+let pendingDeepLinkAgentId: string | undefined;
+
+function agentIdFromDeepLink(value: string): string | undefined {
+  try { const url = new URL(value); const id = url.protocol === "runta-crew:" && url.hostname === "agent" ? decodeURIComponent(url.pathname.replace(/^\//, "")) : ""; return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id) ? id : undefined; } catch { return undefined; }
+}
+function openAgentDeepLink(value: string) {
+  const agentId = agentIdFromDeepLink(value); if (!agentId) return;
+  pendingDeepLinkAgentId = agentId;
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send("deep-link:agent", agentId); pendingDeepLinkAgentId = undefined; }
+}
 
 function mediaTypeForPath(path: string): string {
   const types: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json", ".csv": "text/csv" };
@@ -38,7 +50,8 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
-  if (isDev && process.env.VITE_DEV_SERVER_URL) void window.loadURL(process.env.VITE_DEV_SERVER_URL);
+  mainWindow = window; window.on("closed", () => { if (mainWindow === window) mainWindow = undefined; });
+  if (isDev && devServerUrl) void window.loadURL(devServerUrl);
   else void window.loadFile(join(__dirname, "../renderer/index.html"));
   window.webContents.setWindowOpenHandler(({ url }) => {
     try { const parsed = new URL(url); if (parsed.protocol === "https:" || parsed.protocol === "http:") void shell.openExternal(parsed.toString()); } catch { /* deny malformed URLs */ }
@@ -49,6 +62,7 @@ function createWindow() {
     if (url !== current) event.preventDefault();
   });
   window.webContents.once("did-finish-load", () => {
+    if (pendingDeepLinkAgentId) { window.webContents.send("deep-link:agent", pendingDeepLinkAgentId); pendingDeepLinkAgentId = undefined; }
     const smokeMarker = process.env.RUNTA_CREW_SMOKE_MARKER;
     if (smokeMarker) { writeFileSync(smokeMarker, "ready\n"); app.quit(); return; }
     const screenshotPath = process.env.RUNTA_CREW_SCREENSHOT_PATH;
@@ -56,8 +70,16 @@ function createWindow() {
   });
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
+else {
+  app.on("second-instance", (_event, argv) => { const deepLink = argv.find((value) => value.startsWith("runta-crew://")); if (deepLink) openAgentDeepLink(deepLink); else { mainWindow?.show(); mainWindow?.focus(); } });
+  app.on("open-url", (event, url) => { event.preventDefault(); openAgentDeepLink(url); });
+}
+
 app.whenReady().then(() => {
   settings = loadSettings();
+  if (app.isPackaged) app.setAsDefaultProtocolClient("runta-crew");
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: "Runta Crew", submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }] },
     { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
