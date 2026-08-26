@@ -9,6 +9,7 @@
   "engines": { "node": ">=22 <27" },
   "scripts": {
     "dev": "electron-vite dev",
+    "postinstall": "node scripts/ensure-electron.mjs",
     "build": "electron-vite build",
     "package": "npm run build && electron-builder --mac --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
