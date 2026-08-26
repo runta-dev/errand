@@ -160,7 +160,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }
   async getComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputer> { const agent = await this.getAgent(agentId, signal); return { id: agent.computerId, agentId, runtimeName: agent.computerId, status: agent.status === "offline" ? "offline" : "online", capabilities: ["open", "takeover"] }; }
-  async openComputer(_agentId: string, _signal?: AbortSignal): Promise<{ url: string; mode: "remote" }> { void _agentId; void _signal; throw new CrewError("contract_pending", "Computer sessions require the Cloud Agents computer-session contract"); }
+  async openComputer(_agentId: string, _signal?: AbortSignal): Promise<{ url: string; mode: "remote" }> { void _agentId; void _signal; throw new CrewError("contract_pending", "Computer sessions are outside the current Crew scope"); }
   async takeOverComputer(agentId: string, signal?: AbortSignal) { return this.openComputer(agentId, signal); }
   async reconnect(signal?: AbortSignal) { await this.listAgents(signal); }
   getActivities(_conversationId: string) { void _conversationId; return []; }
