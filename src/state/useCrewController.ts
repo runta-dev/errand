@@ -42,6 +42,7 @@ export function useCrewController(client: CloudAgentsClient) {
     sendMessage: async (text: string, attachments: Attachment[] = []) => { if (!conversationId) return; await client.sendMessage({ conversationId, text, attachments }); },
     reactToMessage: async (messageId: string, reaction: ReactionKind) => { if (!conversationId) return; const next = await client.reactToMessage({ conversationId, messageId, reaction }); setMessages((current) => current.map((message) => message.id === next.id ? next : message)); },
     respondToApproval: async (requestId: string, decision: "allow" | "deny", note?: string) => { const next = await client.respondToApproval({ requestId, decision, note }); setApprovals((current) => current.map((item) => item.id === next.id ? next : item)); },
+    openComputer: async (action: "open" | "takeover") => { if (!selectedAgentId) return { mode: "mock" as const }; try { return await (action === "open" ? client.openComputer(selectedAgentId) : client.takeOverComputer(selectedAgentId)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not open cloud computer"); throw reason; } },
     reconnect: async () => { setConnection("connecting"); try { await client.reconnect(); await refreshAgents(); setConnection("connected"); } catch (reason) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Reconnect failed"); } },
   };
 }

@@ -42,7 +42,7 @@ export function App() {
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} />
     {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReact={crew.reactToMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
-    {detailsOpen && crew.selectedAgent && <DetailPanel agent={crew.selectedAgent} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onClose={() => setDetailsOpen(false)} />}
+    {detailsOpen && crew.selectedAgent && <DetailPanel agent={crew.selectedAgent} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {crew.error && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error}</span><button onClick={crew.dismissError}>Dismiss</button></div>}
     {createOpen && <CreateAgentDialog onClose={() => setCreateOpen(false)} onCreate={crew.createAgent} />}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
