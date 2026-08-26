@@ -82,7 +82,7 @@ else {
 
 app.whenReady().then(() => {
   settings = loadSettings();
-  if (process.platform === "darwin" && app.dock && !app.isPackaged) {
+  if (process.platform === "darwin" && app.dock && isDev) {
     const dockIconPath = join(process.cwd(), "build/icon.png");
     if (existsSync(dockIconPath)) app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
   }
