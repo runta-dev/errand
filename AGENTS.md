@@ -6,6 +6,7 @@
 - Do not invent Runta Cloud Agents routes or event framing. Record assumptions in `API_INTEGRATION.md` and require route/transport injection.
 - Mock fixtures belong under `src/clients/mock`, never in React components. Mock computer UI must remain visibly labeled.
 - Default to the light theme and preserve both theme token sets.
+- Read and follow `DESIGN_SYSTEM.md` for every UI change. Apply its visible-element admission rule and border checklist before adding permanent controls or decoration.
 - Use strict TypeScript; do not add `any` escapes.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and packaging/smoke checks for release-facing changes.
 - Use Conventional Commits. Changes in this `runta-dev` repository must go through a feature branch and pull request.

@@ -58,6 +58,7 @@ Packaged artifacts are written under `release/`. The app is ad-hoc signed for lo
 - `src/ui`: presentation and focused interaction components.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for process and security boundaries.
+See [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) for the UI necessity, whitespace, border, and immediate-comprehension rules.
 
 ## Relationship to the reference project
 
