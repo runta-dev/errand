@@ -41,8 +41,12 @@ describe("RuntaCloudAgentsClient", () => {
     const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledWith("/v1/agents/agent-1/runs/run-1/events?after=-1", expect.any(Function)));
     streamListener?.({ event: "acp.event", id: "4", data: { params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "Hi" } } } } });
+    streamListener?.({ event: "acp.event", id: "5", data: { params: { update: { sessionUpdate: "tool_call", toolCallId: "tool-1", title: "Read", kind: "read", status: "in_progress" } } } });
+    streamListener?.({ event: "acp.event", id: "6", data: { params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tool-1", title: "Read", kind: "read", status: "completed" } } } });
     streamListener?.({ event: "run.status", id: "status:finished", data: { id: "run-1", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "Hi", error: null } });
     expect(events).toContainEqual({ type: "message.delta", messageId: "run-1:agent", delta: "Hi" });
+    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "Reading file", kind: "file", status: "running" }) });
+    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", status: "completed" }) });
     expect(events).toContainEqual(expect.objectContaining({ type: "message.updated", message: expect.objectContaining({ id: "run-1:agent", streaming: false }) }));
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent" });
     subscription.unsubscribe();

@@ -29,7 +29,14 @@ describe("Conversation states", () => {
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);
-    expect(screen.getByRole("status", { name: "Agent is working" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Agent is working: Working" })).toBeInTheDocument();
     expect(container.querySelector(".streaming-caret")).not.toBeInTheDocument();
+  });
+
+  it("exposes the current tool label on the working row", () => {
+    const message: Message = { id: "run-2:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking now" }], createdAt: new Date().toISOString(), streaming: true };
+    render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
+    expect(screen.getByRole("status", { name: "Agent is working: Reading file" })).toBeInTheDocument();
+    expect(screen.getByText("Reading file")).toHaveClass("agent-working-progress");
   });
 });
