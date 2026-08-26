@@ -1,7 +1,7 @@
 import Avatar from "boring-avatars";
 import type { Agent } from "@/domain/types";
 
-const RUNTA_AVATAR_COLORS = ["#F07818", "#FFB477", "#1F1E1E", "#DCE5E0", "#E5E8EE"];
+const RUNTA_AVATAR_COLORS = ["#F07818", "#FFB477", "#FFD7B5", "#F0F0F0", "#DCE5E0"];
 
 export function AgentAvatar({ agent, size = 36 }: { agent: Pick<Agent, "id" | "name">; size?: number }) {
   return <Avatar
