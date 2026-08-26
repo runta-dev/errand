@@ -34,3 +34,5 @@ Unsupported operations fail with `CrewError("contract_pending", ...)`. There is 
 ## End-to-end environment
 
 The Runta development stack must run the `cloud-agents-v1` worktree so `app.forge/api` serves the endpoints above. A 401 from `POST /v1/auth/device/authorization` means an older Runta API is active, because the Cloud Agents OpenAPI marks that route unauthenticated.
+
+With a test credential available, `RUNTA_CREW_E2E_TOKEN=... npm run test:e2e` creates a temporary agent, executes a real run, asserts its result, and deletes the agent and runtime in a `finally` cleanup.

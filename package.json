@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "node scripts/e2e.mjs",
     "test:ui": "vitest run --project renderer",
     "smoke": "node scripts/smoke.mjs"
   },

@@ -36,6 +36,7 @@ Connection overrides are available only in development builds.
 npm run typecheck
 npm run lint
 npm test
+npm run test:e2e # requires RUNTA_CREW_E2E_TOKEN
 npm run build
 npm run package
 npm run smoke
