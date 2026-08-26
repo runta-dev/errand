@@ -45,6 +45,12 @@ describe("Runta Crew authentication surfaces", () => {
     delete window.runtaCrew;
   });
 
+  it("shows immediate feedback while an agent is being created", () => {
+    render(<AgentList agents={[]} selectedId="" search="" creatingAgent signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("status")).toHaveTextContent("New AgentCreating…");
+    expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+  });
+
   it("shows the standalone OAuth page when no credential exists", async () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,

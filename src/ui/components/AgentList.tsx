@@ -4,7 +4,7 @@ import type { Agent } from "@/domain/types";
 import { AgentAvatar } from "./AgentAvatar";
 
 export type AgentAction = "edit" | "pin" | "duplicate" | "toggle-unread" | "delete";
-export function AgentList({ agents, selectedId, search, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
+export function AgentList({ agents, selectedId, search, creatingAgent = false, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgent?: boolean; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
   const [menuAgentId, setMenuAgentId] = useState<string>(); const [accountOpen, setAccountOpen] = useState(false);
   useEffect(() => { if (!menuAgentId) return; const close = () => setMenuAgentId(undefined); window.addEventListener("pointerdown", close); return () => window.removeEventListener("pointerdown", close); }, [menuAgentId]);
   useEffect(() => {
@@ -21,9 +21,15 @@ export function AgentList({ agents, selectedId, search, signedIn, userName, onSe
   const sortedAgents = [...agents].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
   const act = (agent: Agent, action: AgentAction) => { setMenuAgentId(undefined); onAction(agent, action); };
   return <aside className="agent-sidebar">
-    <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" onClick={onCreate}><Plus size={18} /></button></div>
+    <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" disabled={creatingAgent} onClick={onCreate}><Plus size={18} /></button></div>
     <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your crew" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
     <div className="agent-list">
+      {creatingAgent && <div className="agent-row agent-creating" role="status" aria-live="polite">
+        <div className="agent-select">
+          <AgentAvatar agent={{ id: "creating-agent", name: "New Agent" }} />
+          <span className="agent-copy"><strong><span>New Agent</span></strong><span className="agent-preview">Creating…</span></span>
+        </div>
+      </div>}
       {sortedAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
           <AgentAvatar agent={agent} />
