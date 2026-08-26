@@ -30,7 +30,7 @@ React renderer
         └── HttpCloudAgentsClient (contract-ready adapter)
 ```
 
-The renderer runs with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. It cannot access the filesystem, Node.js, arbitrary Electron APIs, or arbitrary IPC channels. The preload exposes only application version, HTTP(S) external navigation, non-secret settings, and write/exists credential operations. It never exposes the stored credential value.
+The renderer runs with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. It cannot access the filesystem, Node.js, arbitrary Electron APIs, or arbitrary IPC channels. The preload exposes only application version, HTTP(S) external navigation, non-secret settings, write/exists credential operations, native file selection metadata, and bounded notification operations. It never exposes the stored credential value or selected filesystem paths.
 
 ## Cloud Agents boundary
 

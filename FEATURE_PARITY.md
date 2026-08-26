@@ -6,15 +6,15 @@ Legend: **Done** ships in the current desktop client; **Local next** can be impl
 
 | Area | Reference surface | Runta Crew status | Next contract or work |
 | --- | --- | --- | --- |
-| Multi-agent sidebar | Named agents, unread state, row actions | **Done:** named agents, status, unread/approval badge, search | **Local next:** rename, pin, duplicate, hide, delete, mark read/unread |
+| Multi-agent sidebar | Named agents, unread state, row actions | **Done:** named agents, status, badges, search, edit, pin, duplicate, read state and confirmed delete | **Local next:** hide/restore and bulk organization |
 | Command palette | Root commands plus agent/message/link search | **Done:** keyboard palette, agent switching, create/settings/computer commands | **Local next:** indexed message/link search after durable history exists |
 | Conversation | Streaming turns, thinking/activity, reconnect | **Done:** typed messages, streaming deltas/completion, activity timeline, errors/reconnect | **API blocked:** durable cursor/replay, cancellation, retries, pagination |
 | Agent computer | Remote box overlay and takeover | **Done:** status, active app, clearly labeled safe mock, Open/Take over UX | **API blocked:** signed ingress/WebRTC/VNC session, arbitration, audit |
 | Approvals | Tool permission scope and user decision | **Done:** scoped Allow once/Deny with note | **API blocked:** expiry, revocation, policy modes, durable audit |
-| Attachments | File/image/link attachment gateway and downloads | **Local next:** native chooser, preview, size/type validation | **API blocked:** upload, signed download, remote file identity |
-| Reactions | Message reaction root and acknowledgement | **Local next:** interaction/model | **API blocked:** persistence and multi-device sync |
-| Notifications | OS notification manager and dock badge | **Local next:** typed notification bridge | **API blocked:** background event delivery when the app is closed |
-| Agent lifecycle | Rename, delete, duplicate, preferences | **Local next:** mock lifecycle and confirmation UI | **API blocked:** canonical mutation and concurrency semantics |
+| Attachments | File/image/link attachment gateway and downloads | **Done:** typed native chooser, opaque IDs, metadata preview, removal, 25 MB validation, mock message parts | **API blocked:** upload, signed download, remote file identity |
+| Reactions | Message reaction root and acknowledgement | **Done:** typed useful/needs-work reactions, optimistic mock event updates and accessible controls | **API blocked:** persistence and multi-device sync |
+| Notifications | OS notification manager and dock badge | **Done:** typed, preference-aware, focus-aware OS notification bridge and unread dock badge | **API blocked:** background event delivery when the app is closed |
+| Agent lifecycle | Rename, delete, duplicate, preferences | **Done:** mock lifecycle, pin/read preferences and destructive confirmation UI | **API blocked:** canonical mutation and concurrency semantics |
 | Plugins/MCP | Plugin lifecycle, OAuth, MCP tools | **API blocked:** Runta plugin catalog, OAuth and agent capability contract | Do not reuse Cursor/xAI plugin services |
 | Skills/routines | Saved repeatable work and proactive routines | **API blocked:** skill schema, scheduler, ownership and execution history | Desktop management UI follows backend contract |
 | Multi-agent handoff | Subagents/group members and shared context | **API blocked:** relationship, handoff, permissions and event model | Keep `ActivityEvent.kind = handoff` as the UI seam |

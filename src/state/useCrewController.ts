@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import type { Agent, ApprovalRequest, CloudComputer, ConnectionState, ConversationEvent, CreateAgentInput, Message } from "@/domain/types";
+import type { Agent, ApprovalRequest, Attachment, CloudComputer, ConnectionState, ConversationEvent, CreateAgentInput, Message, ReactionKind, UpdateAgentInput } from "@/domain/types";
 
 export function useCrewController(client: CloudAgentsClient) {
   const [agents, setAgents] = useState<Agent[]>([]); const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -10,7 +10,7 @@ export function useCrewController(client: CloudAgentsClient) {
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedAgentId), [agents, selectedAgentId]);
   const conversationId = selectedAgentId ? `conversation-${selectedAgentId}` : "";
 
-  const refreshAgents = useCallback(async () => { const next = await client.listAgents(); setAgents(next); setSelectedAgentId((current) => current || next[0]?.id || ""); }, [client]);
+  const refreshAgents = useCallback(async () => { const next = await client.listAgents(); setAgents(next); setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next; }, [client]);
   useEffect(() => { let alive = true; void refreshAgents().then(() => { if (alive) { setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } }); return () => { alive = false; }; }, [refreshAgents]);
   useEffect(() => {
     if (!selectedAgentId) return; const controller = new AbortController(); let alive = true;
@@ -24,17 +24,23 @@ export function useCrewController(client: CloudAgentsClient) {
     if (!conversationId) return; const subscription = client.subscribeToConversationEvents(conversationId, (event: ConversationEvent) => {
       if (event.type === "message.created") setMessages((current) => current.some((message) => message.id === event.message.id) ? current : [...current, event.message]);
       if (event.type === "message.delta") setMessages((current) => current.map((message) => message.id === event.messageId ? { ...message, parts: message.parts.map((part, index) => index === 0 && part.type === "text" ? { ...part, text: part.text + event.delta } : part) } : message));
-      if (event.type === "message.completed") setMessages((current) => current.map((message) => message.id === event.messageId ? { ...message, streaming: false } : message));
-      if (event.type === "approval.updated") setApprovals((current) => current.map((approval) => approval.id === event.approval.id ? event.approval : approval));
+      if (event.type === "message.completed") { setMessages((current) => current.map((message) => message.id === event.messageId ? { ...message, streaming: false } : message)); void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." }); }
+      if (event.type === "message.updated") setMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message));
+      if (event.type === "approval.updated") { setApprovals((current) => current.map((approval) => approval.id === event.approval.id ? event.approval : approval)); if (event.approval.status === "pending") void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} needs approval`, body: event.approval.title }); }
       if (event.type === "connection.changed") setConnection(event.state);
     }); return () => subscription.unsubscribe();
-  }, [client, conversationId]);
+  }, [client, conversationId, selectedAgent?.name]);
 
   return {
     agents, selectedAgent, selectedAgentId, setSelectedAgentId, messages, approvals, computer, connection, loading, error,
     dismissError: () => setError(undefined),
     createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); await refreshAgents(); setSelectedAgentId(agent.id); },
-    sendMessage: async (text: string) => { if (!conversationId) return; await client.sendMessage({ conversationId, text }); },
+    updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },
+    deleteAgent: async (agentId: string) => { await client.deleteAgent(agentId); await refreshAgents(); },
+    duplicateAgent: async (agentId: string) => { const agent = await client.duplicateAgent(agentId); await refreshAgents(); setSelectedAgentId(agent.id); },
+    setAgentUnread: async (agentId: string, unread: boolean) => { await client.setAgentUnread(agentId, unread); await refreshAgents(); },
+    sendMessage: async (text: string, attachments: Attachment[] = []) => { if (!conversationId) return; await client.sendMessage({ conversationId, text, attachments }); },
+    reactToMessage: async (messageId: string, reaction: ReactionKind) => { if (!conversationId) return; const next = await client.reactToMessage({ conversationId, messageId, reaction }); setMessages((current) => current.map((message) => message.id === next.id ? next : message)); },
     respondToApproval: async (requestId: string, decision: "allow" | "deny", note?: string) => { const next = await client.respondToApproval({ requestId, decision, note }); setApprovals((current) => current.map((item) => item.id === next.id ? next : item)); },
     reconnect: async () => { setConnection("connecting"); try { await client.reconnect(); await refreshAgents(); setConnection("connected"); } catch (reason) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Reconnect failed"); } },
   };

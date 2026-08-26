@@ -9,13 +9,17 @@ Runta Crew is the desktop client for creating, messaging, and supervising Runta 
 ## What works today
 
 - Search, switch, and create named agents with roles and goals.
+- Edit, pin, duplicate, mark read/unread, and safely delete agents.
 - Display working, idle, approval-required, and offline states.
 - Persistent-style conversations with user, agent, system, and activity data models.
 - Mock streaming responses and structured browser/file activity.
+- Native attachment selection with opaque IDs, safe metadata previews, removal, and size validation.
+- Useful/needs-work message reactions.
 - Scoped approval review with explicit Allow once / Deny actions and notes.
 - Cloud computer status plus safe mock Open / Take over surfaces.
 - Connection, theme, notification, credential, and About settings.
 - OS-encrypted credential storage through Electron `safeStorage`.
+- Focus-aware OS notifications and macOS unread dock badges.
 - macOS native window/menu, DMG/ZIP packaging, and a native packaged-app smoke check.
 
 ## Development
