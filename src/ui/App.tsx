@@ -15,14 +15,14 @@ import type { Agent } from "@/domain/types";
 
 const LANDING_AGENTS = ["Atlas", "Scout", "Mira", "Nova"] as const;
 
-export function AgentsLanding() {
+export function AgentsLanding({ hasAgents }: { hasAgents: boolean }) {
   return <main className="agents-landing" aria-label="Agents">
     <div className="agents-landing-avatars" aria-hidden="true">
       {LANDING_AGENTS.map((name, index) => <span key={name} style={{ zIndex: LANDING_AGENTS.length - index }}>
         <AgentAvatar agent={{ id: `landing-${name.toLowerCase()}`, name }} size={58} />
       </span>)}
     </div>
-    <p>Choose an agent to get started.</p>
+    <p>{hasAgents ? "Choose an agent to get started." : "Create your first agent to get started."}</p>
   </main>;
 }
 
@@ -132,7 +132,7 @@ export function App() {
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
-    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding />}
+    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} loading={crew.conversationLoading} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding hasAgents={crew.agents.length > 0} />}
     {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}

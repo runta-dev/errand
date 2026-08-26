@@ -26,6 +26,13 @@ describe("Conversation states", () => {
     expect(screen.queryByText("Find the signal")).not.toBeInTheDocument();
   });
 
+  it("shows a skeleton instead of the empty conversation while history loads", () => {
+    render(<Conversation agent={agent} messages={[]} activities={[]} loading onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    expect(screen.getByRole("status", { name: "Loading conversation history" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Atlas", level: 2 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message Atlas" })).not.toBeInTheDocument();
+  });
+
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);

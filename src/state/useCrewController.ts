@@ -18,10 +18,12 @@ export function useCrewController(client: CloudAgentsClient) {
   const [computer, setComputer] = useState<CloudComputer>(); const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [modelProviders, setModelProviders] = useState<ModelProviderOption[]>([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string>();
+  const [loadedAgentIds, setLoadedAgentIds] = useState<ReadonlySet<string>>(() => new Set());
   const [liveAgentId, setLiveAgentId] = useState(""); const [revalidateVersion, setRevalidateVersion] = useState(0);
   const snapshots = useRef(new Map<string, AgentSnapshot>()); const selectedAgentIdRef = useRef(selectedAgentId);
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedAgentId), [agents, selectedAgentId]);
   const conversationId = selectedAgentId ? `conversation-${selectedAgentId}` : "";
+  const conversationLoading = Boolean(selectedAgentId && !loadedAgentIds.has(selectedAgentId));
   useEffect(() => { selectedAgentIdRef.current = selectedAgentId; }, [selectedAgentId]);
 
   const refreshAgents = useCallback(async () => { const next = await client.listAgents(); setAgents((current) => next.map((agent) => ({ ...agent, lastMessagePreview: agent.lastMessagePreview ?? current.find((item) => item.id === agent.id)?.lastMessagePreview }))); setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next; }, [client]);
@@ -47,11 +49,12 @@ export function useCrewController(client: CloudAgentsClient) {
         const nextMessages = data?.messages ?? [];
         const preview = agentMessagePreview([...nextMessages].reverse().find((message) => message.role === "agent"));
         snapshots.current.set(selectedAgentId, { messages: nextMessages, approvals: nextApprovals, computer: nextComputer, cachedAt: Date.now() });
+        setLoadedAgentIds((current) => new Set(current).add(selectedAgentId));
         setMessages(nextMessages); setApprovals(nextApprovals); setComputer(nextComputer);
         setLiveAgentId(selectedAgentId);
         setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: preview || undefined } : agent));
       }
-    }).catch((reason: unknown) => { if (alive && !(reason instanceof DOMException && reason.name === "AbortError")) setError(reason instanceof Error ? reason.message : "Could not load agent"); });
+    }).catch((reason: unknown) => { if (alive && !(reason instanceof DOMException && reason.name === "AbortError")) { snapshots.current.set(selectedAgentId, { messages: [], approvals: [], cachedAt: Date.now() }); setLoadedAgentIds((current) => new Set(current).add(selectedAgentId)); setMessages([]); setError(reason instanceof Error ? reason.message : "Could not load agent"); } });
     return () => { alive = false; controller.abort(); };
   }, [client, revalidateVersion, selectedAgentId]);
   useEffect(() => {
@@ -90,11 +93,11 @@ export function useCrewController(client: CloudAgentsClient) {
   }, [client, conversationId, liveAgentId, selectedAgent?.name, selectedAgentId]);
 
   return {
-    agents, modelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, error,
+    agents, modelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
     dismissError: () => setError(undefined),
     createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); await refreshAgents(); setSelectedAgentId(agent.id); },
     updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },
-    deleteAgent: async (agentId: string) => { await client.deleteAgent(agentId); snapshots.current.delete(agentId); await refreshAgents(); },
+    deleteAgent: async (agentId: string) => { await client.deleteAgent(agentId); snapshots.current.delete(agentId); setLoadedAgentIds((current) => { const next = new Set(current); next.delete(agentId); return next; }); await refreshAgents(); },
     duplicateAgent: async (agentId: string) => { const agent = await client.duplicateAgent(agentId); await refreshAgents(); setSelectedAgentId(agent.id); },
     setAgentUnread: async (agentId: string, unread: boolean) => { await client.setAgentUnread(agentId, unread); await refreshAgents(); },
     sendMessage: async (text: string, attachments: Attachment[] = []) => {
