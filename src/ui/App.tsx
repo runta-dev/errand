@@ -6,11 +6,12 @@ import { AgentList } from "./components/AgentList";
 import { Conversation } from "./components/Conversation";
 import { DetailPanel } from "./components/DetailPanel";
 import { CreateAgentDialog, SettingsDialog } from "./components/Dialogs";
+import { CommandPalette } from "./components/CommandPalette";
 import runtaLogo from "@/assets/runta-logo-icon.png";
 
 export function App() {
   const client = useMemo(() => new MockCloudAgentsClient(), []); const crew = useCrewController(client);
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth >= 1120); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false);
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth >= 1120); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false);
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   useEffect(() => {
     void window.runtaCrew?.settings.get().then((settings) => {
@@ -19,13 +20,21 @@ export function App() {
         : settings.theme;
     });
   }, []);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((value) => !value); }
+      if (event.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   if (crew.loading) return <div className="loading-screen"><img className="loading-logo" src={runtaLogo} alt="" /><span>Loading your crew…</span></div>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} />
-    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
+    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} onOpenPalette={() => setPaletteOpen(true)} /> : <main className="empty-state">No agent selected</main>}
     {detailsOpen && crew.selectedAgent && <DetailPanel agent={crew.selectedAgent} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onClose={() => setDetailsOpen(false)} />}
     {crew.error && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error}</span><button onClick={crew.dismissError}>Dismiss</button></div>}
     {createOpen && <CreateAgentDialog onClose={() => setCreateOpen(false)} onCreate={crew.createAgent} />}
     {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+    <CommandPalette open={paletteOpen} agents={crew.agents} onClose={() => setPaletteOpen(false)} onSelectAgent={crew.setSelectedAgentId} onCreateAgent={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onComputer={() => setDetailsOpen(true)} />
   </div>;
 }
