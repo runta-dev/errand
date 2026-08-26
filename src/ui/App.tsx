@@ -13,12 +13,25 @@ import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
 import type { Agent } from "@/domain/types";
 
+const LANDING_AGENTS = ["Atlas", "Scout", "Mira", "Nova"] as const;
+
+export function AgentsLanding() {
+  return <main className="agents-landing" aria-label="Agents">
+    <div className="agents-landing-avatars" aria-hidden="true">
+      {LANDING_AGENTS.map((name, index) => <span key={name} style={{ zIndex: LANDING_AGENTS.length - index }}>
+        <AgentAvatar agent={{ id: `landing-${name.toLowerCase()}`, name }} size={58} />
+      </span>)}
+    </div>
+    <p>Choose an agent to get started.</p>
+  </main>;
+}
+
 export function App() {
   const forceLoading = import.meta.env.DEV && new URLSearchParams(window.location.search).get("loading") === "1";
   const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client);
   const [authReady, setAuthReady] = useState(false); const [signedIn, setSignedIn] = useState(false); const [authPending, setAuthPending] = useState(false); const [authError, setAuthError] = useState<string>(); const [userName, setUserName] = useState(""); const [userEmail, setUserEmail] = useState("");
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [creatingAgent, setCreatingAgent] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
@@ -92,8 +105,9 @@ export function App() {
     if (action === "toggle-unread") void crew.setAgentUnread(agent.id, agent.unreadCount === 0);
   }
   async function createDefaultAgent() {
-    if (creatingAgent) return;
-    setCreatingAgent(true); setAuthError(undefined);
+    if (creatingAgentName) return;
+    const name = nextAgentName(crew.agents.map((agent) => agent.name));
+    setCreatingAgentName(name); setAuthError(undefined);
     try {
       const settings = await window.runtaCrew?.settings.get();
       const provider = crew.modelProviders.find((item) => item.id === settings?.modelProviderId);
@@ -102,10 +116,10 @@ export function App() {
         setSettingsOpen(true);
         return;
       }
-      await crew.createAgent({ name: nextAgentName(crew.agents.map((agent) => agent.name)), modelProviderId: provider.id });
+      await crew.createAgent({ name, modelProviderId: provider.id });
     }
     catch (reason) { setAuthError(reason instanceof Error ? reason.message : "Could not create the agent."); }
-    finally { setCreatingAgent(false); }
+    finally { setCreatingAgentName(undefined); }
   }
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -117,8 +131,8 @@ export function App() {
   if (forceLoading || !authReady || crew.loading) return <div className="loading-screen"><div className="loading-avatar" aria-hidden="true"><AgentAvatar agent={{ id: "runta-crew-loading", name: "Runta Crew" }} size={56} /></div><span className="loading-copy" data-text="Getting your crew ready…">Getting your crew ready…</span></div>;
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
-    <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgent={creatingAgent} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
-    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
+    <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
+    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding />}
     {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
