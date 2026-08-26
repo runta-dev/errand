@@ -8,6 +8,7 @@ import { DetailPanel } from "./components/DetailPanel";
 import { CreateAgentDialog, DeleteAgentDialog, EditAgentDialog, SettingsDialog } from "./components/Dialogs";
 import { CommandPalette } from "./components/CommandPalette";
 import { LoginPage } from "./components/LoginPage";
+import { AgentAvatar } from "./components/AgentAvatar";
 import { accountDisplayName } from "./accountDisplayName";
 import type { Agent } from "@/domain/types";
 
@@ -84,14 +85,14 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  if (!authReady || crew.loading) return <div className="loading-screen"><span>Loading Runta Crew…</span></div>;
+  if (!authReady || crew.loading) return <div className="loading-screen"><div className="loading-avatar" aria-hidden="true"><AgentAvatar agent={{ id: "runta-crew-loading", name: "Runta Crew" }} size={56} /></div><span>Loading Runta Crew…</span></div>;
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
     {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReact={crew.reactToMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
     {detailsOpen && crew.selectedAgent && <DetailPanel agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {crew.error && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error}</span><button onClick={crew.dismissError}>Dismiss</button></div>}
-    {createOpen && <CreateAgentDialog onClose={() => setCreateOpen(false)} onCreate={crew.createAgent} />}
+    {createOpen && <CreateAgentDialog providers={crew.modelProviders} onClose={() => setCreateOpen(false)} onCreate={crew.createAgent} />}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
     {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}

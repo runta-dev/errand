@@ -1,10 +1,10 @@
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import { CrewError, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ReactToMessageInput, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
+import { CrewError, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderOption, type ReactToMessageInput, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
 import type { CloudRequest } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number }
 interface RuntaRun { id: string; agent_id: string; status: string; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string; updated_at?: string }
-interface ModelProvider { id: string }
+interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
@@ -26,6 +26,12 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id };
   }
 
+  async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderOption[]> {
+    void _signal;
+    const response = await this.request<{ model_providers: ModelProvider[] }>({ method: "GET", path: "/v1/model-providers" });
+    return response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined }));
+  }
+
   async listAgents(_signal?: AbortSignal) {
     void _signal;
     const response = await this.request<{ agents: RuntaAgent[] }>({ method: "GET", path: "/v1/agents?limit=250" });
@@ -34,10 +40,8 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}` })); }
   async createAgent(input: CreateAgentInput, _signal?: AbortSignal) {
     void _signal;
-    const providers = await this.request<{ model_providers: ModelProvider[] }>({ method: "GET", path: "/v1/model-providers" });
-    const provider = providers.model_providers[0];
-    if (!provider) throw new CrewError("contract_pending", "Create a managed model provider before creating a Crew agent");
-    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v1/agents", body: { name: input.name, model_provider: { type: "managed", id: provider.id } } });
+    if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating a Crew agent");
+    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v1/agents", body: { name: input.name, model_provider: { type: "managed", id: input.modelProviderId } } });
     return this.mapAgent(created);
   }
   async updateAgent(_agentId: string, _input: UpdateAgentInput, _signal?: AbortSignal): Promise<Agent> { void _agentId; void _input; void _signal; throw new CrewError("contract_pending", "Agent metadata updates require the Cloud Agents mutation contract"); }

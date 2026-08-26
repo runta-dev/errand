@@ -19,7 +19,8 @@ export type ActivityStatus = "running" | "completed" | "failed";
 export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; status: ActivityStatus; createdAt: string }
 export interface ApprovalRequest { id: string; agentId: string; conversationId: string; title: string; description: string; scope: string[]; status: "pending" | "allowed" | "denied"; createdAt: string; responseNote?: string }
 export interface CloudComputer { id: string; agentId: string; runtimeName: string; status: "online" | "starting" | "offline"; activeApp?: string; previewUrl?: string; capabilities: Array<"open" | "takeover"> }
-export interface CreateAgentInput { name: string; role: string; goal: string }
+export interface ModelProviderOption { id: string; name: string; protocol: string; defaultModel?: string }
+export interface CreateAgentInput { name: string; modelProviderId: string }
 export interface UpdateAgentInput { name?: string; role?: string; goal?: string; pinned?: boolean }
 export interface SendMessageInput { conversationId: string; text: string; attachments?: Attachment[]; signal?: AbortSignal }
 export interface RespondApprovalInput { requestId: string; decision: "allow" | "deny"; note?: string }
