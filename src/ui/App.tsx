@@ -8,6 +8,7 @@ import { DetailPanel } from "./components/DetailPanel";
 import { CreateAgentDialog, DeleteAgentDialog, EditAgentDialog, SettingsDialog } from "./components/Dialogs";
 import { CommandPalette } from "./components/CommandPalette";
 import { LoginPage } from "./components/LoginPage";
+import { accountDisplayName } from "./accountDisplayName";
 import type { Agent } from "@/domain/types";
 
 export function App() {
@@ -27,7 +28,7 @@ export function App() {
     if (!response) { setSignedIn(false); setUserName(""); setAuthError("Runta session validation did not return a response."); return false; }
     if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
     const profile = response.body as { data?: { display_name?: string | null; email?: string } } | undefined;
-    setUserName(profile?.data?.display_name?.trim() || profile?.data?.email || "Runta account");
+    setUserName(accountDisplayName(profile?.data));
     setClient(new RuntaCloudAgentsClient()); setSignedIn(true);
     setAuthReady(true); setAuthError(undefined);
     return true;

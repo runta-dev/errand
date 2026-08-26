@@ -2,11 +2,18 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
+import { accountDisplayName } from "./accountDisplayName";
 import { AgentList } from "./components/AgentList";
 import { LoginPage } from "./components/LoginPage";
 import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew authentication surfaces", () => {
+  it("derives a human account name from the authorized profile", () => {
+    expect(accountDisplayName({ email: "shiqi@runta.com" })).toBe("Shiqi");
+    expect(accountDisplayName({ email: "shiqi.mei@runta.com" })).toBe("Shiqi Mei");
+    expect(accountDisplayName({ email: "xydd@runta.com" })).toBe("Xydd");
+    expect(accountDisplayName({ display_name: "  Shiqi Mei  ", email: "ignored@runta.com" })).toBe("Shiqi Mei");
+  });
   it("keeps account actions in the username popover", async () => {
     const opened: string[] = [];
     const bridge: DesktopBridge = {

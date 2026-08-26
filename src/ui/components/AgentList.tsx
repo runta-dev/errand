@@ -29,7 +29,7 @@ export function AgentList({ agents, selectedId, search, signedIn, userName, onSe
           <AgentAvatar agent={agent} />
           <span className="agent-copy"><strong><span>{agent.name}{agent.pinned && <Pin size={10} aria-label="Pinned" />}</span></strong>{agent.lastMessagePreview && <span className="agent-preview">{agent.lastMessagePreview}</span>}</span>
         </button>
-        <button className="agent-more" aria-label={`More actions for ${agent.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMenuAgentId((current) => current === agent.id ? undefined : agent.id)}><MoreHorizontal size={15} /></button>
+        <button className="agent-more" aria-label={`More actions for ${agent.name}`} data-tooltip="More" onPointerDown={(event) => event.stopPropagation()} onClick={() => setMenuAgentId((current) => current === agent.id ? undefined : agent.id)}><MoreHorizontal size={15} /></button>
         {menuAgentId === agent.id && <div className="agent-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
           <button role="menuitem" onClick={() => act(agent, "edit")}><Pencil size={13} /> Edit agent</button>
           <button role="menuitem" onClick={() => act(agent, "pin")}>{agent.pinned ? <PinOff size={13} /> : <Pin size={13} />}{agent.pinned ? "Unpin" : "Pin to top"}</button>
