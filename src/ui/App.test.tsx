@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { App } from "./App";
+import { AgentsLanding, App } from "./App";
 import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
 import { AgentList } from "./components/AgentList";
@@ -9,6 +9,12 @@ import { LoginPage } from "./components/LoginPage";
 import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew authentication surfaces", () => {
+  it("adapts the landing copy to whether agents exist", () => {
+    const { rerender } = render(<AgentsLanding hasAgents={false} />);
+    expect(screen.getByText("Create your first agent to get started.")).toBeInTheDocument();
+    rerender(<AgentsLanding hasAgents />);
+    expect(screen.getByText("Choose an agent to get started.")).toBeInTheDocument();
+  });
   it("assigns unique single names before deterministic word pairs", () => {
     const used: string[] = [];
     for (let index = 0; index < 18; index += 1) { const name = nextAgentName(used); expect(used.map((value) => value.toLowerCase())).not.toContain(name.toLowerCase()); used.push(name); }
@@ -49,6 +55,16 @@ describe("Runta Crew authentication surfaces", () => {
     render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("AtlasCreating…");
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+  });
+
+  it("distinguishes an empty crew from an empty search result", () => {
+    const props = { agents: [], selectedId: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
+    const { rerender } = render(<AgentList {...props} search="" />);
+    expect(screen.getByText("No agents yet")).toBeInTheDocument();
+    expect(screen.getByText("Create your first agent with the + button.")).toBeInTheDocument();
+    rerender(<AgentList {...props} search="missing" />);
+    expect(screen.getByText("No agents found")).toBeInTheDocument();
+    expect(screen.getByText("Try a different search.")).toBeInTheDocument();
   });
 
   it("shows the standalone OAuth page when no credential exists", async () => {

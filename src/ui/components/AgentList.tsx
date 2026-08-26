@@ -30,6 +30,10 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, signe
           <span className="agent-copy"><strong><span>{creatingAgentName}</span></strong><span className="agent-preview">Creating…</span></span>
         </div>
       </div>}
+      {!creatingAgentName && sortedAgents.length === 0 && <div className="agent-list-empty">
+        <strong>{search.trim() ? "No agents found" : "No agents yet"}</strong>
+        <span>{search.trim() ? "Try a different search." : "Create your first agent with the + button."}</span>
+      </div>}
       {sortedAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
           <AgentAvatar agent={agent} />
