@@ -21,7 +21,9 @@ describe("Runta Crew primary flows", () => {
     await user.type(screen.getByLabelText("Name"), "Scout"); await user.type(screen.getByLabelText("Role"), "Research lead"); await user.type(screen.getByLabelText("Initial goal"), "Track customer feedback");
     await user.click(screen.getByRole("button", { name: "Create agent" }));
     await screen.findByRole("heading", { name: "Scout", level: 1 });
-    await user.type(screen.getByLabelText("Message Scout"), "Start with this week's interviews"); await user.click(screen.getByLabelText("Send message"));
+    const send = screen.getByLabelText("Send message"); expect(send).toBeDisabled();
+    expect([...send.querySelectorAll("path")].map((path) => path.getAttribute("d"))).toEqual(["m5 12 7-7 7 7", "M12 19V5"]);
+    await user.type(screen.getByLabelText("Message Scout"), "Start with this week's interviews"); expect(send).toBeEnabled(); await user.click(send);
     expect(await screen.findByText("Start with this week's interviews")).toBeInTheDocument();
   });
 
