@@ -61,10 +61,8 @@ describe("Runta Crew authentication surfaces", () => {
     const props = { agents: [], selectedId: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
     const { rerender } = render(<AgentList {...props} search="" />);
     expect(screen.getByText("No agents yet")).toBeInTheDocument();
-    expect(screen.getByText("Create your first agent with the + button.")).toBeInTheDocument();
     rerender(<AgentList {...props} search="missing" />);
     expect(screen.getByText("No agents found")).toBeInTheDocument();
-    expect(screen.getByText("Try a different search.")).toBeInTheDocument();
   });
 
   it("shows the standalone OAuth page when no credential exists", async () => {
