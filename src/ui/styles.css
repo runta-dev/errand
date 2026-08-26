@@ -70,5 +70,5 @@ button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{ba
 @media (max-width:1080px){.palette-trigger span{display:none}.palette-trigger{width:32px;justify-content:center}.palette-trigger kbd{display:none}}
 .screen-trigger:disabled{opacity:1}
 .agent-working-indicator{cursor:default;user-select:none}
-.conversation-header{padding-right:24px;padding-left:24px}
+.conversation-header{padding-right:18px;padding-left:22px}
 .message.user .message-body{border-radius:14px}
