@@ -22,7 +22,7 @@ The renderer runs with `contextIsolation: true`, `nodeIntegration: false`, and `
 
 ## Authentication
 
-The Cloud API owns Runta Crew device authorization at `/v1/auth/device/authorization` and `/v1/auth/device/token`. The resulting bearer credential is encrypted on disk and remains in the main process. The renderer verifies a session through `/v1/auth/context`; it never receives the token.
+The Cloud API owns Runta Crew device authorization at `/v1/auth/device/authorization` and `/v1/auth/device/token`. The resulting bearer credential is encrypted on disk and remains in the main process. The renderer verifies a user-authorized device session through `/v1/me`; it never receives the token.
 
 The client identifies itself as `runta_crew`, a value defined by the Cloud Agents OpenAPI contract. Production connection endpoints are compiled defaults and cannot be overridden from the renderer.
 

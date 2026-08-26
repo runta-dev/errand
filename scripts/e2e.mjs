@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-const endpoint = (process.env.RUNTA_CREW_E2E_ENDPOINT || "https://app.forge/api").replace(/\/+$/, "");
+const endpoint = (process.env.RUNTA_CREW_E2E_ENDPOINT || "https://api.forge").replace(/\/+$/, "");
 const token = process.env.RUNTA_CREW_E2E_TOKEN;
 if (!token) throw new Error("RUNTA_CREW_E2E_TOKEN is required");
 
@@ -15,8 +15,8 @@ async function request(path, init = {}) {
   return body;
 }
 
-const context = await request("/v1/auth/context");
-assert.equal(typeof (context.principalId ?? context.principal_id), "string", "auth context must include a principal id");
+const profile = await request("/v1/me");
+assert.equal(typeof profile.data?.user_id, "string", "user-authorized device token must expose /v1/me");
 
 const providers = await request("/v1/model-providers");
 const provider = providers.model_providers?.[0];

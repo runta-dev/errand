@@ -8,7 +8,7 @@ const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_S
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-const defaultSettings: AppSettings = { endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
+const defaultSettings: AppSettings = { endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
@@ -36,7 +36,9 @@ function loadSettings(): AppSettings {
   try {
     const value = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<AppSettings>;
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
-    return { endpoint: isDev && typeof value.endpoint === "string" && value.endpoint.trim() ? value.endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
+    const configuredEndpoint = typeof value.endpoint === "string" ? value.endpoint.trim() : "";
+    const endpoint = configuredEndpoint === "https://app.forge/api" ? defaultSettings.endpoint : configuredEndpoint;
+    return { endpoint: isDev && endpoint ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
   } catch { return settings; }
 }
 

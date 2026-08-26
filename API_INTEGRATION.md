@@ -8,7 +8,7 @@ Runta Crew targets the `codex/cloud-agents-v1` implementation in the Runta monor
 | --- | --- |
 | Device authorization | `POST /v1/auth/device/authorization` |
 | Device token exchange | `POST /v1/auth/device/token` |
-| Session verification | `GET /v1/auth/context` |
+| Session verification | `GET /v1/me` |
 | Token revocation | `DELETE /v1/auth/token` |
 | Agents | `GET/POST /v1/agents`, `GET/DELETE /v1/agents/{agent_id}` |
 | Model providers | `GET /v1/model-providers`, `PATCH /v1/model-providers/{provider_id}` |
@@ -33,6 +33,6 @@ Unsupported operations fail with `CrewError("contract_pending", ...)`. There is 
 
 ## End-to-end environment
 
-The Runta development stack must run the `cloud-agents-v1` worktree so `app.forge/api` serves the endpoints above. A 401 from `POST /v1/auth/device/authorization` means an older Runta API is active, because the Cloud Agents OpenAPI marks that route unauthenticated.
+The Runta development stack must run the `cloud-agents-v1` worktree on `runta-gcp`. `api.forge` serves the API and `app.forge` serves the Dashboard authorization UI. A 401 from `POST /v1/auth/device/authorization` means an older Runta API is active, because the Cloud Agents OpenAPI marks that route unauthenticated.
 
 With a test credential available, `RUNTA_CREW_E2E_TOKEN=... npm run test:e2e` creates a temporary agent, executes a real run, asserts its result, and deletes the agent and runtime in a `finally` cleanup.
