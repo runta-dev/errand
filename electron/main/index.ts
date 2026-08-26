@@ -36,7 +36,7 @@ function loadSettings(): AppSettings {
   try {
     const value = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<AppSettings>;
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
-    return { endpoint: typeof value.endpoint === "string" && value.endpoint.trim() ? value.endpoint : defaultSettings.endpoint, dashboardUrl: typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
+    return { endpoint: isDev && typeof value.endpoint === "string" && value.endpoint.trim() ? value.endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
   } catch { return settings; }
 }
 
@@ -107,7 +107,10 @@ ipcMain.handle("desktop:openExternal", (_event, url: string) => {
   return shell.openExternal(parsed.toString());
 });
 ipcMain.handle("settings:get", () => settings);
-ipcMain.handle("settings:set", (_event, next: AppSettings) => { settings = next; writeFileSync(settingsFile(), JSON.stringify(settings, null, 2), { mode: 0o600 }); return settings; });
+ipcMain.handle("settings:set", (_event, next: AppSettings) => {
+  settings = { ...next, endpoint: isDev ? next.endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? next.dashboardUrl : defaultSettings.dashboardUrl };
+  writeFileSync(settingsFile(), JSON.stringify(settings, null, 2), { mode: 0o600 }); return settings;
+});
 ipcMain.handle("credentials:has", () => existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0);
 ipcMain.handle("credentials:set", (_event, token: string | null) => {
   if (!token) { if (existsSync(credentialFile())) rmSync(credentialFile()); authorizationStatus = "idle"; return false; }

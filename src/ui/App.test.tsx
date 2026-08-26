@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
 import { AgentList } from "./components/AgentList";
+import { LoginPage } from "./components/LoginPage";
 import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew primary flows", () => {
@@ -162,5 +163,11 @@ describe("Runta Crew primary flows", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     delete window.runtaCrew;
+  });
+
+  it("never exposes connection configuration in production mode", () => {
+    render(<LoginPage status="idle" allowConnectionSettings={false} onSignIn={() => undefined} onSettings={() => undefined} />);
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(window, { key: "Control" });
+    expect(screen.queryByRole("button", { name: "Connection settings" })).not.toBeInTheDocument();
   });
 });
