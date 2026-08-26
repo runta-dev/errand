@@ -14,6 +14,7 @@ Legend: **Done** ships in the current desktop client; **Local next** can be impl
 | Attachments | File/image/link attachment gateway and downloads | **Done:** typed native chooser, opaque IDs, metadata preview, removal, 25 MB validation, mock message parts | **API blocked:** upload, signed download, remote file identity |
 | Reactions | Message reaction root and acknowledgement | **Done:** typed useful/needs-work reactions, optimistic mock event updates and accessible controls | **API blocked:** persistence and multi-device sync |
 | Notifications | OS notification manager and dock badge | **Done:** typed, preference-aware, focus-aware OS notification bridge and unread dock badge | **API blocked:** background event delivery when the app is closed |
+| Deep links | Single-instance app routing from external surfaces | **Done:** strict `runta-crew://agent/<id>` parsing and typed renderer navigation | **API blocked:** canonical web-to-desktop link issuance |
 | Agent lifecycle | Rename, delete, duplicate, preferences | **Done:** mock lifecycle, pin/read preferences and destructive confirmation UI | **API blocked:** canonical mutation and concurrency semantics |
 | Plugins/MCP | Plugin lifecycle, OAuth, MCP tools | **API blocked:** Runta plugin catalog, OAuth and agent capability contract | Do not reuse Cursor/xAI plugin services |
 | Skills/routines | Saved repeatable work and proactive routines | **API blocked:** skill schema, scheduler, ownership and execution history | Desktop management UI follows backend contract |

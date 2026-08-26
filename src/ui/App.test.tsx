@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
@@ -8,7 +8,7 @@ describe("Runta Crew primary flows", () => {
   it("switches agents and handles a scoped approval", async () => {
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: /^M Mira Needs approval 1$/ }));
+    await user.click(screen.getByRole("button", { name: /^M Mira Needs approval$/ }));
     await screen.findByText("Submit vendor renewal");
     await user.type(screen.getByLabelText("Approval note"), "Approved for this form only");
     await user.click(screen.getByRole("button", { name: "Allow once" }));
@@ -27,6 +27,7 @@ describe("Runta Crew primary flows", () => {
 
   it("labels the computer surface as a safe mock", async () => {
     render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Open agent computer" }));
     expect(screen.getByText("Safe mock preview")).toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "Take over" }));
     expect(document.querySelector(".detail-panel")).toHaveAttribute("data-computer-action", "takeover");
     await waitFor(() => expect(document.querySelector(".computer-overlay")?.textContent).toContain("No remote desktop session is connected yet."));
@@ -49,6 +50,7 @@ describe("Runta Crew primary flows", () => {
       credentials: { has: async () => false, set: async () => true },
       attachments: { choose: async () => [{ id: "selected-1", name: "brief.pdf", size: 4200, mediaType: "application/pdf" }] },
       notifications: { show: async () => true, setBadge: async () => undefined },
+      deepLinks: { onOpenAgent: () => () => undefined },
     };
     window.runtaCrew = bridge;
     const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
@@ -59,6 +61,20 @@ describe("Runta Crew primary flows", () => {
     expect(await screen.findByText("Please review this brief")).toBeInTheDocument();
     expect(screen.getByText("4.1 KB · application/pdf")).toBeInTheDocument();
     delete window.runtaCrew;
+  });
+
+  it("opens a validated agent deep link through the typed desktop bridge", async () => {
+    let listener: ((agentId: string) => void) | undefined;
+    const bridge: DesktopBridge = {
+      getVersion: async () => "0.1.0", openExternal: async () => undefined,
+      settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [] },
+      notifications: { show: async () => true, setBadge: async () => undefined },
+      deepLinks: { onOpenAgent: (next) => { listener = next; return () => { listener = undefined; }; } },
+    };
+    window.runtaCrew = bridge; render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    await act(() => listener?.("patch"));
+    expect(await screen.findByRole("heading", { name: "Patch", level: 1 })).toBeInTheDocument(); delete window.runtaCrew;
   });
 
   it("records useful feedback on an agent message", async () => {
@@ -74,8 +90,8 @@ describe("Runta Crew primary flows", () => {
     const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
     await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
     await user.click(screen.getByRole("menuitem", { name: "Mark as read" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Atlas Working in cloud computer/ })).not.toHaveTextContent("2"));
     await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
+    expect(await screen.findByRole("menuitem", { name: "Mark as unread" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Edit agent" }));
     const name = screen.getByLabelText("Name"); await user.clear(name); await user.type(name, "Atlas Prime");
     await user.click(screen.getByRole("button", { name: "Save agent" }));

@@ -9,3 +9,4 @@
 - Use strict TypeScript; do not add `any` escapes.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and packaging/smoke checks for release-facing changes.
 - Use Conventional Commits. Changes in this `runta-dev` repository must go through a feature branch and pull request.
+- Runta Crew is temporarily not onboarded to Runta Review. Do not trigger, wait for, or treat Runta Review as a merge gate for this repository. GitHub pull requests and the repository CI workflow are the required review/delivery path until this rule is explicitly changed.

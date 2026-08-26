@@ -20,6 +20,7 @@ Runta Crew is the desktop client for creating, messaging, and supervising Runta 
 - Connection, theme, notification, credential, and About settings.
 - OS-encrypted credential storage through Electron `safeStorage`.
 - Focus-aware OS notifications and macOS unread dock badges.
+- Single-instance `runta-crew://agent/<id>` deep links.
 - macOS native window/menu, DMG/ZIP packaging, and a native packaged-app smoke check.
 
 ## Development

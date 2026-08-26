@@ -10,4 +10,5 @@ export interface DesktopBridge {
   credentials: { has(): Promise<boolean>; set(token: string | null): Promise<boolean> };
   attachments: { choose(): Promise<SelectedAttachment[]> };
   notifications: { show(notification: DesktopNotification): Promise<boolean>; setBadge(count: number): Promise<void> };
+  deepLinks: { onOpenAgent(listener: (agentId: string) => void): () => void };
 }

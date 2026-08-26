@@ -1,7 +1,6 @@
-import { Copy, Mail, MailOpen, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Trash2, UsersRound } from "lucide-react";
+import { Copy, Mail, MailOpen, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Agent, AgentStatus } from "@/domain/types";
-import runtaLogo from "@/assets/runta-logo-icon.png";
 
 export type AgentAction = "edit" | "pin" | "duplicate" | "toggle-unread" | "delete";
 const statusLabel: Record<AgentStatus, string> = { working: "Working", idle: "Idle", waiting_for_approval: "Needs approval", offline: "Offline" };
@@ -12,16 +11,13 @@ export function AgentList({ agents, selectedId, search, onSearch, onSelect, onAc
   const sortedAgents = [...agents].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
   const act = (agent: Agent, action: AgentAction) => { setMenuAgentId(undefined); onAction(agent, action); };
   return <aside className="agent-sidebar">
-    <div className="brand"><img src={runtaLogo} alt="" aria-hidden="true" /><span className="brand-runta">Runta</span><span className="brand-product">Crew</span></div>
-    <button className="primary-button create-button" onClick={onCreate}><Plus size={16} /> New agent</button>
+    <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" onClick={onCreate}><Plus size={18} /></button></div>
     <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your crew" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
-    <div className="section-label"><span>Your crew</span><span>{agents.length}</span></div>
     <div className="agent-list">
       {sortedAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
-          <span className={`avatar avatar-${agent.id}`}>{agent.avatar}<i className={`presence ${agent.status}`} /></span>
-          <span className="agent-copy"><strong>{agent.name}{agent.pinned && <Pin size={10} aria-label="Pinned" />}</strong><span>{agent.status === "working" ? "Working in cloud computer" : statusLabel[agent.status]}</span></span>
-          {agent.unreadCount > 0 && <span className={`count ${agent.status === "waiting_for_approval" ? "attention" : ""}`}>{agent.unreadCount}</span>}
+          <span className={`avatar avatar-${agent.id}`}>{agent.avatar}</span>
+          <span className="agent-copy"><strong><span>{agent.name}{agent.pinned && <Pin size={10} aria-label="Pinned" />}</span></strong><span>{agent.status === "working" ? "Working in cloud computer" : statusLabel[agent.status]}</span></span>
         </button>
         <button className="agent-more" aria-label={`More actions for ${agent.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMenuAgentId((current) => current === agent.id ? undefined : agent.id)}><MoreHorizontal size={15} /></button>
         {menuAgentId === agent.id && <div className="agent-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
@@ -34,6 +30,6 @@ export function AgentList({ agents, selectedId, search, onSearch, onSelect, onAc
         </div>}
       </div>)}
     </div>
-    <div className="sidebar-bottom"><button><UsersRound size={16} /> Workspace</button><button onClick={onSettings}><Settings size={16} /> Settings</button></div>
+    <div className="sidebar-bottom"><button onClick={onSettings}><Settings size={16} /> Settings</button></div>
   </aside>;
 }
