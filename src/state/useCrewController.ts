@@ -9,6 +9,7 @@ function agentMessagePreview(message?: Message): string {
 
 interface AgentSnapshot { messages: Message[]; approvals: ApprovalRequest[]; computer?: CloudComputer; cachedAt: number }
 const SNAPSHOT_TTL_MS = 60_000;
+const isTransientGatewayError = (message?: string) => /^Cloud Agents request failed \((?:502|503|504)\)$/.test(message ?? "");
 const OPTIMISTIC_USER_PREFIX = "optimistic-user:";
 const OPTIMISTIC_AGENT_PREFIX = "optimistic-agent:";
 
@@ -28,7 +29,7 @@ export function useCrewController(client: CloudAgentsClient) {
 
   const refreshAgents = useCallback(async () => { const next = await client.listAgents(); setAgents((current) => next.map((agent) => ({ ...agent, lastMessagePreview: agent.lastMessagePreview ?? current.find((item) => item.id === agent.id)?.lastMessagePreview }))); setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next; }, [client]);
   useEffect(() => { let alive = true; void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, providers]) => { if (alive) { setModelProviders(providers); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } }); return () => { alive = false; }; }, [client, refreshAgents]);
-  useEffect(() => { const timer = window.setInterval(() => { void refreshAgents().catch(() => undefined); }, 5_000); return () => window.clearInterval(timer); }, [refreshAgents]);
+  useEffect(() => { const timer = window.setInterval(() => { void refreshAgents().then(() => setError((current) => isTransientGatewayError(current) ? undefined : current)).catch(() => undefined); }, 5_000); return () => window.clearInterval(timer); }, [refreshAgents]);
   useEffect(() => {
     const cached = snapshots.current.get(selectedAgentId);
     setActivities([]);
