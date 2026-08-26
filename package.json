@@ -6,7 +6,9 @@
   "main": "out/main/index.js",
   "description": "Desktop client for Runta Cloud Agents",
   "author": "Runta",
-  "engines": { "node": ">=22 <27" },
+  "engines": {
+    "node": ">=22 <27"
+  },
   "scripts": {
     "dev": "node scripts/rebrand-electron.mjs && electron-vite dev",
     "postinstall": "node scripts/ensure-electron.mjs",
@@ -20,6 +22,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
+    "boring-avatars": "^2.0.4",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
@@ -52,12 +55,30 @@
     "appId": "com.runta.crew",
     "productName": "Runta Crew",
     "asar": true,
-    "directories": { "output": "release" },
-    "files": ["out/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
-      "target": [{ "target": "dmg", "arch": ["arm64"] }, { "target": "zip", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "identity": null
     }
   }
