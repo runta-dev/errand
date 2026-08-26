@@ -12,6 +12,11 @@ const bridge: DesktopBridge = {
     has: () => ipcRenderer.invoke("credentials:has"),
     set: (token) => ipcRenderer.invoke("credentials:set", token),
   },
+  auth: {
+    start: () => ipcRenderer.invoke("auth:start"),
+    status: () => ipcRenderer.invoke("auth:status"),
+  },
+  cloud: { request: (request) => ipcRenderer.invoke("cloud:request", request) },
   attachments: { choose: () => ipcRenderer.invoke("attachments:choose") },
   notifications: {
     show: (notification) => ipcRenderer.invoke("notifications:show", notification),

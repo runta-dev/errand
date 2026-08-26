@@ -8,7 +8,7 @@ describe("Runta Crew primary flows", () => {
   it("switches agents and handles a scoped approval", async () => {
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: /^M Mira Needs approval$/ }));
+    await user.click(screen.getByRole("button", { name: /Mira Needs approval$/ }));
     await screen.findByText("Submit vendor renewal");
     await user.type(screen.getByLabelText("Approval note"), "Approved for this form only");
     await user.click(screen.getByRole("button", { name: "Allow once" }));
@@ -110,5 +110,32 @@ describe("Runta Crew primary flows", () => {
     expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete agent" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "More actions for Patch copy" })).not.toBeInTheDocument());
+  });
+
+  it("keeps account actions in the username popover", async () => {
+    const opened: string[] = [];
+    const bridge: DesktopBridge = {
+      getVersion: async () => "0.1.0", openExternal: async (url) => { opened.push(url); },
+      settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [] },
+      notifications: { show: async () => true, setBadge: async () => undefined },
+      deepLinks: { onOpenAgent: () => () => undefined },
+    };
+    window.runtaCrew = bridge;
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+
+    const account = screen.getByRole("button", { name: "Runta account" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await user.click(account);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([" Settings", " Join Discord", " Logout"]);
+
+    await user.click(screen.getByRole("menuitem", { name: "Join Discord" }));
+    expect(opened).toEqual(["https://discord.com/invite/62d4bkaTnS"]);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    await user.click(account);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    delete window.runtaCrew;
   });
 });

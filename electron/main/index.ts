@@ -1,17 +1,20 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell } from "electron";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { AppSettings } from "../../src/shared/desktop";
+import type { AppSettings, CloudRequest, DeviceAuthorizationStatus } from "../../src/shared/desktop";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-let settings: AppSettings = { endpoint: "", theme: "light", notifications: true };
+let settings: AppSettings = { endpoint: "", dashboardUrl: "", theme: "light", notifications: true };
+let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
 let mainWindow: BrowserWindow | undefined;
 let pendingDeepLinkAgentId: string | undefined;
+
+app.setName("Runta Crew");
 
 function agentIdFromDeepLink(value: string): string | undefined {
   try { const url = new URL(value); const id = url.protocol === "runta-crew:" && url.hostname === "agent" ? decodeURIComponent(url.pathname.replace(/^\//, "")) : ""; return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id) ? id : undefined; } catch { return undefined; }
@@ -32,7 +35,7 @@ function loadSettings(): AppSettings {
   try {
     const value = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<AppSettings>;
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
-    return { endpoint: typeof value.endpoint === "string" ? value.endpoint : "", notifications: value.notifications !== false, theme };
+    return { endpoint: typeof value.endpoint === "string" ? value.endpoint : "", dashboardUrl: typeof value.dashboardUrl === "string" ? value.dashboardUrl : "", notifications: value.notifications !== false, theme };
   } catch { return settings; }
 }
 
@@ -79,6 +82,10 @@ else {
 
 app.whenReady().then(() => {
   settings = loadSettings();
+  if (process.platform === "darwin" && app.dock && !app.isPackaged) {
+    const dockIconPath = join(process.cwd(), "build/icon.png");
+    if (existsSync(dockIconPath)) app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
+  }
   if (app.isPackaged) app.setAsDefaultProtocolClient("runta-crew");
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: "Runta Crew", submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }] },
@@ -106,6 +113,61 @@ ipcMain.handle("credentials:set", (_event, token: string | null) => {
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
   writeFileSync(credentialFile(), safeStorage.encryptString(token), { mode: 0o600 });
   return true;
+});
+ipcMain.handle("auth:status", () => authorizationStatus);
+ipcMain.handle("auth:start", async () => {
+  if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
+  const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
+  const response = await fetch(new URL("v1/auth/device/authorization", apiBase), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client_id: "runta_crew", device_name: `Runta Crew on ${process.platform}`, app_url: settings.dashboardUrl.replace(/\/+$/, "") }),
+  });
+  if (!response.ok) throw new Error(`Device authorization failed (${response.status})`);
+  const envelope = await response.json() as { data: { device_code: string; user_code: string; verification_uri_complete: string; expires_at: string; interval: number } };
+  authorizationStatus = "pending";
+  const poll = async () => {
+    let interval = Math.max(5, envelope.data.interval || 5);
+    while (authorizationStatus === "pending") {
+      await new Promise((resolve) => setTimeout(resolve, interval * 1000));
+      const tokenResponse = await fetch(new URL("v1/auth/device/token", apiBase), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+      if (tokenResponse.ok) {
+        const token = await tokenResponse.json() as { access_token: string };
+        if (!safeStorage.isEncryptionAvailable()) { authorizationStatus = "error"; return; }
+        writeFileSync(credentialFile(), safeStorage.encryptString(token.access_token), { mode: 0o600 });
+        authorizationStatus = "authorized";
+        return;
+      }
+      const error = await tokenResponse.json().catch(() => ({})) as { error?: string; interval?: number };
+      if (error.error === "slow_down") interval = Math.max(interval + 5, error.interval ?? 0);
+      else if (error.error === "access_denied") { authorizationStatus = "denied"; return; }
+      else if (error.error === "expired_token") { authorizationStatus = "expired"; return; }
+      else if (error.error !== "authorization_pending") { authorizationStatus = "error"; return; }
+    }
+  };
+  void poll();
+  await shell.openExternal(envelope.data.verification_uri_complete);
+  return { verificationUrl: envelope.data.verification_uri_complete, userCode: envelope.data.user_code, expiresAt: envelope.data.expires_at };
+});
+ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
+  if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
+  if (!existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("Runta API token is not configured");
+  const encrypted = readFileSync(credentialFile());
+  if (!encrypted.length) throw new Error("Runta API token is not configured");
+  const token = safeStorage.decryptString(encrypted);
+  const endpoint = new URL(`${settings.endpoint.replace(/\/+$/, "")}/`);
+  const url = new URL(request.path.replace(/^\/+/, ""), endpoint);
+  const apiPrefix = `${endpoint.pathname.replace(/\/+$/, "")}/v1/`;
+  if (url.origin !== endpoint.origin || !url.pathname.startsWith(apiPrefix)) throw new Error("Cloud request path is not allowed");
+  const response = await fetch(url, {
+    method: request.method,
+    headers: { authorization: `Bearer ${token}`, ...(request.body === undefined ? {} : { "content-type": "application/json" }) },
+    body: request.body === undefined ? undefined : JSON.stringify(request.body),
+  });
+  const text = await response.text();
+  let body: unknown;
+  if (text) { try { body = JSON.parse(text) as unknown; } catch { body = text; } }
+  return { status: response.status, body };
 });
 ipcMain.handle("attachments:choose", async () => {
   const result = await dialog.showOpenDialog({ title: "Attach files to your message", properties: ["openFile", "multiSelections"], filters: [{ name: "Supported files", extensions: ["png", "jpg", "jpeg", "gif", "webp", "pdf", "txt", "md", "json", "csv"] }] });

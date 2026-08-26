@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { MockCloudAgentsClient } from "@/clients/mock/MockCloudAgentsClient";
+import { RuntaCloudAgentsClient } from "@/clients/http/RuntaCloudAgentsClient";
 import { useCrewController } from "@/state/useCrewController";
 import { AgentList, type AgentAction } from "./components/AgentList";
 import { Conversation } from "./components/Conversation";
@@ -10,15 +11,24 @@ import { CommandPalette } from "./components/CommandPalette";
 import type { Agent } from "@/domain/types";
 
 export function App() {
-  const client = useMemo(() => new MockCloudAgentsClient(), []); const crew = useCrewController(client);
+  const [client, setClient] = useState<MockCloudAgentsClient | RuntaCloudAgentsClient>(() => new MockCloudAgentsClient()); const crew = useCrewController(client);
+  const [userName, setUserName] = useState("Runta account");
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
   const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   useEffect(() => {
-    void window.runtaCrew?.settings.get().then((settings) => {
+    void Promise.all([window.runtaCrew?.settings.get(), window.runtaCrew?.credentials.has()]).then(([settings, hasCredential]) => {
+      if (!settings) return;
       document.documentElement.dataset.theme = settings.theme === "system"
         ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
         : settings.theme;
+      if (settings.endpoint && hasCredential) {
+        setClient(new RuntaCloudAgentsClient());
+        void window.runtaCrew?.cloud?.request({ method: "GET", path: "/v1/me" }).then((response) => {
+          const value = response.body as { data?: { user?: { display_name?: string }; display_name?: string }; display_name?: string } | undefined;
+          setUserName(value?.data?.user?.display_name ?? value?.data?.display_name ?? value?.display_name ?? "Runta account");
+        });
+      }
     });
   }, []);
   useEffect(() => { void window.runtaCrew?.notifications.setBadge(crew.agents.reduce((total, agent) => total + agent.unreadCount, 0)); }, [crew.agents]);
@@ -40,7 +50,7 @@ export function App() {
   }, []);
   if (crew.loading) return <div className="loading-screen"><span>Loading your crew…</span></div>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
-    <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} />
+    <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onLogout={() => { void window.runtaCrew?.credentials.set(null); setClient(new MockCloudAgentsClient()); setUserName("Runta account"); }} />
     {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReact={crew.reactToMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
     {detailsOpen && crew.selectedAgent && <DetailPanel agent={crew.selectedAgent} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {crew.error && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error}</span><button onClick={crew.dismissError}>Dismiss</button></div>}

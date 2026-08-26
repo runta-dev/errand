@@ -9,5 +9,5 @@
 - Read and follow `DESIGN_SYSTEM.md` for every UI change. Apply its visible-element admission rule and border checklist before adding permanent controls or decoration.
 - Use strict TypeScript; do not add `any` escapes.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and packaging/smoke checks for release-facing changes.
-- Use Conventional Commits. Changes in this `runta-dev` repository must go through a feature branch and pull request.
-- Runta Crew is temporarily not onboarded to Runta Review. Do not trigger, wait for, or treat Runta Review as a merge gate for this repository. GitHub pull requests and the repository CI workflow are the required review/delivery path until this rule is explicitly changed.
+- Use Conventional Commits. Runta Crew is currently in rapid iteration: commit and push directly to the active remote branch. A pull request is not required unless the user explicitly asks for one. Keep branch history linear and never introduce merge commits.
+- Runta Crew is temporarily not onboarded to Runta Review. Do not trigger, wait for, or treat Runta Review as a merge gate for this repository.
