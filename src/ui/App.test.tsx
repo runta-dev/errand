@@ -30,4 +30,14 @@ describe("Runta Crew primary flows", () => {
     expect(document.querySelector(".detail-panel")).toHaveAttribute("data-computer-action", "takeover");
     await waitFor(() => expect(document.querySelector(".computer-overlay")?.textContent).toContain("No remote desktop session is connected yet."));
   });
+
+  it("opens the command palette from the native shortcut and switches agents", async () => {
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Search commands and agents"), "Patch");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("heading", { name: "Patch", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+  });
 });
