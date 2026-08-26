@@ -28,6 +28,7 @@
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "streamdown": "^2.6.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

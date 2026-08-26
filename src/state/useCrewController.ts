@@ -19,6 +19,7 @@ export function useCrewController(client: CloudAgentsClient) {
   const refreshAgents = useCallback(async () => { const next = await client.listAgents(); setAgents(next); setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next; }, [client]);
   useEffect(() => { let alive = true; void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, providers]) => { if (alive) { setModelProviders(providers); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } }); return () => { alive = false; }; }, [client, refreshAgents]);
   useEffect(() => {
+    setMessages([]); setApprovals([]); setComputer(undefined);
     if (!selectedAgentId) return; const controller = new AbortController(); let alive = true;
     Promise.all([client.listConversations(selectedAgentId, controller.signal), client.listApprovalRequests(selectedAgentId, controller.signal), client.getComputer(selectedAgentId, controller.signal)]).then(async ([conversations, nextApprovals, nextComputer]) => {
       const conversation = conversations[0]; const data = conversation ? await client.getConversation(conversation.id, controller.signal) : undefined;
@@ -32,7 +33,8 @@ export function useCrewController(client: CloudAgentsClient) {
     return () => { alive = false; controller.abort(); };
   }, [client, selectedAgentId]);
   useEffect(() => {
-    if (!conversationId) return; const subscription = client.subscribeToConversationEvents(conversationId, (event: ConversationEvent) => {
+    if (!conversationId) return; let active = true; const subscription = client.subscribeToConversationEvents(conversationId, (event: ConversationEvent) => {
+      if (!active) return;
       if (event.type === "message.created") {
         setMessages((current) => current.some((message) => message.id === event.message.id) ? current : [...current, event.message]);
         if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
@@ -48,7 +50,7 @@ export function useCrewController(client: CloudAgentsClient) {
       }
       if (event.type === "approval.updated") { setApprovals((current) => current.map((approval) => approval.id === event.approval.id ? event.approval : approval)); if (event.approval.status === "pending") void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} needs approval`, body: event.approval.title }); }
       if (event.type === "connection.changed") setConnection(event.state);
-    }); return () => subscription.unsubscribe();
+    }); return () => { active = false; subscription.unsubscribe(); };
   }, [client, conversationId, selectedAgent?.name, selectedAgentId]);
 
   return {
