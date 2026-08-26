@@ -63,12 +63,13 @@ describe("useCrewController", () => {
   it("optimistically renders the user message and working agent before the request resolves", async () => {
     let resolveSend!: (message: Message) => void;
     const pendingSend = new Promise<Message>((resolve) => { resolveSend = resolve; });
+    const sendMessage = vi.fn(async () => pendingSend);
     const listeners = new Map<string, (event: ConversationEvent) => void>();
     const client: CloudAgentsClient = {
       listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas")],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation: async (id) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date(0).toISOString() }, messages: [] }),
-      sendMessage: async () => pendingSend, subscribeToConversationEvents: (id, listener) => { listeners.set(id, listener); return { unsubscribe: () => undefined }; }, listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+      sendMessage, subscribeToConversationEvents: (id, listener) => { listeners.set(id, listener); return { unsubscribe: () => undefined }; }, listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
     };
     const { result } = renderHook(() => useCrewController(client));
     await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
@@ -78,6 +79,12 @@ describe("useCrewController", () => {
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }] });
     expect(result.current.messages[1]).toMatchObject({ role: "agent", streaming: true });
+    await act(async () => { await result.current.sendMessage("hello"); });
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0]?.id).toBe("run-1:user");
 
     await act(async () => { resolveSend({ id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
     expect(result.current.messages[0]?.id).toBe("run-1:user");
@@ -137,5 +144,22 @@ describe("useCrewController", () => {
     serverAgents = [agent("scout", "Scout")];
     await act(async () => { await result.current.reconnect(); });
     expect(result.current.agents.map((item) => item.id)).toEqual(["scout"]);
+  });
+
+  it("revalidates the selected conversation when the Agent preview is newer than its snapshot", async () => {
+    const server = { latestReply: undefined as string | undefined };
+    const getConversation = vi.fn(async (id: string) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date().toISOString() }, messages: server.latestReply ? [{ id: "reply", conversationId: id, role: "agent" as const, parts: [{ type: "text" as const, text: server.latestReply }], createdAt: new Date().toISOString() }] : [] }));
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => [], listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: server.latestReply }],
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date().toISOString() }], getConversation, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
+    await waitFor(() => expect(getConversation).toHaveBeenCalledTimes(1));
+    server.latestReply = "Server reply";
+    await act(async () => { await result.current.reconnect(); });
+    await waitFor(() => expect(result.current.messages[0]?.parts[0]).toEqual({ type: "text", text: "Server reply" }));
+    expect(getConversation).toHaveBeenCalledTimes(2);
   });
 });

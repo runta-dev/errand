@@ -7,6 +7,10 @@ function agentMessagePreview(message?: Message): string {
   return message.parts.filter((part) => part.type === "text").map((part) => part.text).join("").trim();
 }
 
+function messageText(message: Message): string {
+  return message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+}
+
 interface AgentSnapshot { messages: Message[]; approvals: ApprovalRequest[]; computer?: CloudComputer; cachedAt: number }
 const SNAPSHOT_TTL_MS = 60_000;
 const isTransientGatewayError = (message?: string) => /^Cloud Agents request failed \((?:502|503|504)\)$/.test(message ?? "");
@@ -21,7 +25,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   const [loading, setLoading] = useState(enabled); const [error, setError] = useState<string>();
   const [loadedAgentIds, setLoadedAgentIds] = useState<ReadonlySet<string>>(() => new Set());
   const [liveAgentId, setLiveAgentId] = useState(""); const [revalidateVersion, setRevalidateVersion] = useState(0);
-  const snapshots = useRef(new Map<string, AgentSnapshot>()); const selectedAgentIdRef = useRef(selectedAgentId); const deletingAgentIds = useRef(new Set<string>());
+  const snapshots = useRef(new Map<string, AgentSnapshot>()); const selectedAgentIdRef = useRef(selectedAgentId); const deletingAgentIds = useRef(new Set<string>()); const sendingAgentIds = useRef(new Set<string>());
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedAgentId), [agents, selectedAgentId]);
   const conversationId = selectedAgentId ? `conversation-${selectedAgentId}` : "";
   const conversationLoading = Boolean(selectedAgentId && !loadedAgentIds.has(selectedAgentId));
@@ -31,6 +35,11 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     const fetched = await client.listAgents();
     for (const agentId of deletingAgentIds.current) if (!fetched.some((agent) => agent.id === agentId)) deletingAgentIds.current.delete(agentId);
     const next = fetched.filter((agent) => !deletingAgentIds.current.has(agent.id));
+    const selectedId = selectedAgentIdRef.current; const selected = next.find((agent) => agent.id === selectedId); const snapshot = snapshots.current.get(selectedId);
+    if (selected?.lastMessagePreview && snapshot && !snapshot.messages.some((message) => message.streaming)) {
+      const cachedPreview = agentMessagePreview([...snapshot.messages].reverse().find((message) => message.role === "agent"));
+      if (cachedPreview !== selected.lastMessagePreview) { snapshots.current.set(selectedId, { ...snapshot, cachedAt: 0 }); setRevalidateVersion((value) => value + 1); }
+    }
     setAgents((current) => next.map((agent) => ({ ...agent, lastMessagePreview: agent.lastMessagePreview ?? current.find((item) => item.id === agent.id)?.lastMessagePreview })));
     setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next;
   }, [client]);
@@ -82,6 +91,10 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       if (event.type === "message.created") {
         updateMessages((current) => {
           const withoutPlaceholder = event.message.role === "agent" ? current.filter((message) => !message.id.startsWith(OPTIMISTIC_AGENT_PREFIX)) : current;
+          if (event.message.role === "user" && sendingAgentIds.current.has(selectedAgentId)) {
+            const optimisticIndex = withoutPlaceholder.findIndex((message) => message.id.startsWith(OPTIMISTIC_USER_PREFIX) && messageText(message) === messageText(event.message));
+            if (optimisticIndex >= 0) return withoutPlaceholder.map((message, index) => index === optimisticIndex ? event.message : message);
+          }
           return withoutPlaceholder.some((message) => message.id === event.message.id) ? withoutPlaceholder : [...withoutPlaceholder, event.message];
         });
         if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
@@ -135,6 +148,8 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     sendMessage: async (text: string, attachments: Attachment[] = []) => {
       if (!conversationId || !selectedAgentId) return;
       const targetAgentId = selectedAgentId; const targetConversationId = conversationId; const nonce = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      if (sendingAgentIds.current.has(targetAgentId)) return;
+      sendingAgentIds.current.add(targetAgentId);
       const optimisticUserId = `${OPTIMISTIC_USER_PREFIX}${nonce}`; const optimisticAgentId = `${OPTIMISTIC_AGENT_PREFIX}${nonce}`; const createdAt = new Date().toISOString();
       const optimisticUser: Message = { id: optimisticUserId, conversationId: targetConversationId, role: "user", parts: [...(text ? [{ type: "text" as const, text }] : []), ...attachments.map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt };
       const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
@@ -155,6 +170,8 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         if (selectedAgentIdRef.current === targetAgentId) setMessages(rolledBack);
         setError(reason instanceof Error ? reason.message : "Could not send message");
         throw reason;
+      } finally {
+        sendingAgentIds.current.delete(targetAgentId);
       }
     },
     respondToApproval: async (requestId: string, decision: "allow" | "deny", note?: string) => { const targetAgentId = selectedAgentId; const next = await client.respondToApproval({ requestId, decision, note }); const snapshot = snapshots.current.get(targetAgentId); const nextApprovals = (snapshot?.approvals ?? []).map((item) => item.id === next.id ? next : item); if (snapshot) snapshots.current.set(targetAgentId, { ...snapshot, approvals: nextApprovals, cachedAt: Date.now() }); if (selectedAgentIdRef.current === targetAgentId) setApprovals(nextApprovals); },
