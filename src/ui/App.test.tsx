@@ -65,11 +65,22 @@ describe("Runta Crew authentication surfaces", () => {
     expect(screen.getByText("No agents found")).toBeInTheDocument();
   });
 
+  it("shows only Agent actions backed by the Cloud Agents API", async () => {
+    const user = userEvent.setup(); const atlas = { id: "atlas", name: "Atlas", role: "Cloud coding agent", goal: "Atlas", status: "idle" as const, avatar: "A", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "atlas" };
+    render(<AgentList agents={[atlas]} selectedId="atlas" search="" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([" Edit agent", " Delete agent"]);
+    expect(screen.queryByText("Duplicate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as unread")).not.toBeInTheDocument();
+  });
+
   it("shows the standalone OAuth page when no credential exists", async () => {
+    const cloudRequest = vi.fn();
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
       settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
+      cloud: { request: cloudRequest },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
     };
@@ -78,6 +89,7 @@ describe("Runta Crew authentication surfaces", () => {
     expect(await screen.findByRole("heading", { name: "Runta Crew", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Runta account" })).not.toBeInTheDocument();
+    expect(cloudRequest).not.toHaveBeenCalled();
     delete window.runtaCrew;
   });
 

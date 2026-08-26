@@ -28,10 +28,10 @@ export function AgentsLanding({ hasAgents }: { hasAgents: boolean }) {
 
 export function App() {
   const forceLoading = import.meta.env.DEV && new URLSearchParams(window.location.search).get("loading") === "1";
-  const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client);
   const [authReady, setAuthReady] = useState(false); const [signedIn, setSignedIn] = useState(false); const [authPending, setAuthPending] = useState(false); const [authError, setAuthError] = useState<string>(); const [userName, setUserName] = useState(""); const [userEmail, setUserEmail] = useState("");
+  const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client, signedIn);
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [composerFocusRequest, setComposerFocusRequest] = useState(0); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
@@ -40,9 +40,13 @@ export function App() {
     return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/, "") || "Authorization failed. Try again.";
   }
   async function connectAuthenticatedAccount() {
-    const response = await window.runtaCrew?.cloud?.request({ method: "GET", path: "/v1/me" }).catch(() => undefined);
-    if (!response) { setSignedIn(false); setUserName(""); setAuthError("Runta session validation did not return a response."); return false; }
-    if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
+    let timeout: number | undefined;
+    const response = await Promise.race([
+      window.runtaCrew?.cloud?.request({ method: "GET", path: "/v1/me" }).catch(() => undefined),
+      new Promise<undefined>((resolve) => { timeout = window.setTimeout(() => resolve(undefined), 5_000); }),
+    ]).finally(() => { if (timeout !== undefined) window.clearTimeout(timeout); });
+    if (!response) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError("Runta session validation did not return a response."); return false; }
+    if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
     const profile = response.body as { data?: { display_name?: string | null; email?: string } } | undefined;
     setUserName(accountDisplayName(profile?.data));
     setUserEmail(profile?.data?.email ?? "");
@@ -60,6 +64,12 @@ export function App() {
         const status = await window.runtaCrew?.auth?.status();
         if (status === "pending") continue;
         if (status === "authorized") {
+          let credentialReady = false;
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            if (await window.runtaCrew?.credentials.has()) { credentialReady = true; break; }
+            await new Promise((resolve) => window.setTimeout(resolve, 50));
+          }
+          if (!credentialReady) throw new Error("Runta authorization completed before the local session was ready. Try again.");
           await connectAuthenticatedAccount();
           return;
         }
@@ -100,9 +110,6 @@ export function App() {
   function handleAgentAction(agent: Agent, action: AgentAction) {
     if (action === "edit") setEditingAgent(agent);
     if (action === "delete") setDeletingAgent(agent);
-    if (action === "pin") void crew.updateAgent(agent.id, { pinned: !agent.pinned });
-    if (action === "duplicate") void crew.duplicateAgent(agent.id);
-    if (action === "toggle-unread") void crew.setAgentUnread(agent.id, agent.unreadCount === 0);
   }
   async function createDefaultAgent() {
     if (creatingAgentName) return;
@@ -117,6 +124,7 @@ export function App() {
         return;
       }
       await crew.createAgent({ name, modelProviderId: provider.id });
+      setComposerFocusRequest((current) => current + 1);
     }
     catch (reason) { setAuthError(reason instanceof Error ? reason.message : "Could not create the agent."); }
     finally { setCreatingAgentName(undefined); }
@@ -132,7 +140,7 @@ export function App() {
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
-    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} loading={crew.conversationLoading} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding hasAgents={crew.agents.length > 0} />}
+    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} loading={crew.conversationLoading} focusRequest={composerFocusRequest} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding hasAgents={crew.agents.length > 0} />}
     {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}

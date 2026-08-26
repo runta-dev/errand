@@ -7,6 +7,16 @@ import { useCrewController } from "./useCrewController";
 const agent = (id: string, name: string): Agent => ({ id, name, role: "Cloud coding agent", goal: name, status: "idle", avatar: name[0]!, lastActiveAt: new Date(0).toISOString(), unreadCount: 0, computerId: id });
 
 describe("useCrewController", () => {
+  it("does not start Cloud Agents requests until authentication is enabled", async () => {
+    const listAgents = vi.fn(); const listModelProviders = vi.fn();
+    const client = { listAgents, listModelProviders } as unknown as CloudAgentsClient;
+    const { result } = renderHook(() => useCrewController(client, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(listAgents).not.toHaveBeenCalled();
+    expect(listModelProviders).not.toHaveBeenCalled();
+    expect(result.current.connection).toBe("disconnected");
+  });
+
   it("never lets the previous agent overwrite a newly selected conversation", async () => {
     let resolveAtlas!: (value: { conversation: { id: string; agentId: string; title: string; updatedAt: string }; messages: Message[] }) => void;
     const atlasConversation = new Promise<Parameters<typeof resolveAtlas>[0]>((resolve) => { resolveAtlas = resolve; });
@@ -88,5 +98,44 @@ describe("useCrewController", () => {
     expect(result.current.selectedAgentId).toBe("new-agent");
     expect(result.current.conversationLoading).toBe(false);
     expect(result.current.messages).toEqual([]);
+  });
+
+  it("removes a deleted agent immediately and rolls back when deletion fails", async () => {
+    let rejectDelete!: (reason: Error) => void;
+    const pendingDelete = new Promise<void>((_resolve, reject) => { rejectDelete = reject; });
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => pendingDelete, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
+    let deletion!: Promise<void>;
+    act(() => { deletion = result.current.deleteAgent("atlas"); });
+    expect(result.current.agents.map((item) => item.id)).toEqual(["scout"]);
+    expect(result.current.selectedAgentId).toBe("scout");
+    rejectDelete(new Error("Delete failed"));
+    await act(async () => { await expect(deletion).rejects.toThrow("Delete failed"); });
+    expect(result.current.agents.map((item) => item.id)).toEqual(["atlas", "scout"]);
+    expect(result.current.selectedAgentId).toBe("scout");
+    expect(result.current.error).toBe("Delete failed");
+  });
+
+  it("keeps an accepted deletion tombstoned until the server list confirms removal", async () => {
+    let serverAgents = [agent("atlas", "Atlas"), agent("scout", "Scout")];
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => [], listAgents: async () => serverAgents,
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
+    await act(async () => { await result.current.deleteAgent("atlas"); });
+    expect(result.current.agents.map((item) => item.id)).toEqual(["scout"]);
+    await act(async () => { await result.current.reconnect(); });
+    expect(result.current.agents.map((item) => item.id)).toEqual(["scout"]);
+    serverAgents = [agent("scout", "Scout")];
+    await act(async () => { await result.current.reconnect(); });
+    expect(result.current.agents.map((item) => item.id)).toEqual(["scout"]);
   });
 });

@@ -56,7 +56,13 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   private async request<T>(request: CloudRequest): Promise<T> {
     const bridge = window.runtaCrew?.cloud;
     if (!bridge) throw new CrewError("network", "Runta desktop cloud bridge is unavailable", true);
-    const response = await bridge.request(request);
+    let response;
+    try { response = await bridge.request(request); }
+    catch (reason) {
+      const message = reason instanceof Error ? reason.message : "";
+      if (/token is not configured/i.test(message)) throw new CrewError("unauthorized", "Authentication is required");
+      throw new CrewError("network", "Runta Cloud Agents is unavailable", true);
+    }
     if (response.status === 401) throw new CrewError("unauthorized", "Authentication is required");
     if (response.status === 404) throw new CrewError("not_found", "Resource not found");
     if (response.status < 200 || response.status >= 300) throw new CrewError("unknown", `Cloud Agents request failed (${response.status})`, response.status >= 500);
@@ -85,7 +91,11 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const created = await this.request<RuntaAgent>({ method: "POST", path: "/v1/agents", body: { name: input.name, model_provider: { type: "managed", id: input.modelProviderId } } });
     return this.mapAgent(created);
   }
-  async updateAgent(_agentId: string, _input: UpdateAgentInput, _signal?: AbortSignal): Promise<Agent> { void _agentId; void _input; void _signal; throw new CrewError("contract_pending", "Agent metadata updates require the Cloud Agents mutation contract"); }
+  async updateAgent(agentId: string, input: UpdateAgentInput, _signal?: AbortSignal): Promise<Agent> {
+    void _signal;
+    if (!input.name || Object.keys(input).some((key) => key !== "name")) throw new CrewError("contract_pending", "Only the Agent name can be updated");
+    return this.mapAgent(await this.request<RuntaAgent>({ method: "PATCH", path: `/v1/agents/${encodeURIComponent(agentId)}`, body: { name: input.name } }));
+  }
   async deleteAgent(agentId: string, _signal?: AbortSignal) { void _signal; await this.request<void>({ method: "DELETE", path: `/v1/agents/${encodeURIComponent(agentId)}?delete_runtime=true` }); }
   async duplicateAgent(_agentId: string, _signal?: AbortSignal): Promise<Agent> { void _agentId; void _signal; throw new CrewError("contract_pending", "Agent duplication requires the Cloud Agents duplication contract"); }
   async setAgentUnread(agentId: string, _unread: boolean, signal?: AbortSignal) { return this.getAgent(agentId, signal); }

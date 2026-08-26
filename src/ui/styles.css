@@ -71,4 +71,5 @@ button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{ba
 .screen-trigger:disabled{opacity:1}
 .agent-working-indicator{cursor:default;user-select:none}
 .conversation-header{padding-right:18px;padding-left:22px}
+.composer-bottom>.submit-button[data-state="stopping"]:disabled{background:var(--text);color:var(--surface);opacity:1}.composer-bottom>.submit-button .stop-icon{width:20px;height:20px}
 .message.user .message-body{border-radius:14px}

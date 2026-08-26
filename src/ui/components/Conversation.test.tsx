@@ -34,6 +34,14 @@ describe("Conversation states", () => {
     expect(container.querySelector(".skeleton-bubble")?.parentElement).toHaveClass("skeleton-user");
   });
 
+  it("focuses the composer when a new-agent focus request arrives", () => {
+    const { rerender } = render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    const composer = screen.getByRole("textbox", { name: "Message Atlas" });
+    expect(composer).not.toHaveFocus();
+    rerender(<Conversation agent={agent} messages={[]} activities={[]} focusRequest={1} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    expect(composer).toHaveFocus();
+  });
+
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);
