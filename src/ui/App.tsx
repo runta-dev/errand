@@ -14,9 +14,9 @@ import type { Agent } from "@/domain/types";
 
 export function App() {
   const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client);
-  const [authReady, setAuthReady] = useState(false); const [signedIn, setSignedIn] = useState(false); const [authPending, setAuthPending] = useState(false); const [authError, setAuthError] = useState<string>(); const [userName, setUserName] = useState("");
+  const [authReady, setAuthReady] = useState(false); const [signedIn, setSignedIn] = useState(false); const [authPending, setAuthPending] = useState(false); const [authError, setAuthError] = useState<string>(); const [userName, setUserName] = useState(""); const [userEmail, setUserEmail] = useState("");
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
@@ -30,6 +30,7 @@ export function App() {
     if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
     const profile = response.body as { data?: { display_name?: string | null; email?: string } } | undefined;
     setUserName(accountDisplayName(profile?.data));
+    setUserEmail(profile?.data?.email ?? "");
     setClient(new RuntaCloudAgentsClient()); setSignedIn(true);
     setAuthReady(true); setAuthError(undefined);
     return true;
@@ -53,8 +54,13 @@ export function App() {
     finally { setAuthPending(false); }
   }
   async function logout() {
-    try { await window.runtaCrew?.auth?.logout(); }
-    finally { setClient(new RuntaCloudAgentsClient()); setSignedIn(false); setAuthReady(true); setUserName(""); }
+    setAuthError(undefined);
+    try {
+      await window.runtaCrew?.auth?.logout();
+      setClient(new RuntaCloudAgentsClient()); setSignedIn(false); setAuthReady(true); setUserName(""); setUserEmail("");
+    } catch (reason) {
+      setAuthError(reason instanceof Error ? reason.message : "Could not revoke the Runta key. Try again.");
+    }
   }
   useEffect(() => {
     void Promise.all([window.runtaCrew?.settings.get(), window.runtaCrew?.credentials.has()]).then(async ([settings, hasCredential]) => {
@@ -71,6 +77,11 @@ export function App() {
   useEffect(() => { void window.runtaCrew?.notifications.setBadge(crew.agents.reduce((total, agent) => total + agent.unreadCount, 0)); }, [crew.agents]);
   useEffect(() => window.runtaCrew?.deepLinks.onOpenAgent((agentId) => { if (crewAgents.some((agent) => agent.id === agentId)) selectAgent(agentId); }), [crewAgents, selectAgent]);
   useEffect(() => { if (crew.selectedAgent?.status === "waiting_for_approval") setDetailsOpen(true); }, [crew.selectedAgent?.status]);
+  useEffect(() => {
+    if (detailsOpen) { setDetailsMounted(true); return; }
+    const timer = window.setTimeout(() => setDetailsMounted(false), 220);
+    return () => window.clearTimeout(timer);
+  }, [detailsOpen]);
   function handleAgentAction(agent: Agent, action: AgentAction) {
     if (action === "edit") setEditingAgent(agent);
     if (action === "delete") setDeletingAgent(agent);
@@ -89,13 +100,13 @@ export function App() {
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
-    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} connection={crew.connection} onSend={crew.sendMessage} onReact={crew.reactToMessage} onReconnect={() => void crew.reconnect()} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
-    {detailsOpen && crew.selectedAgent && <DetailPanel agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
-    {crew.error && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error}</span><button onClick={crew.dismissError}>Dismiss</button></div>}
+    {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={client.getActivities(`conversation-${crew.selectedAgent.id}`)} onSend={crew.sendMessage} onReact={crew.reactToMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <main className="empty-state">No agent selected</main>}
+    {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
+    {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
     {createOpen && <CreateAgentDialog providers={crew.modelProviders} onClose={() => setCreateOpen(false)} onCreate={crew.createAgent} />}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
-    {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+    {settingsOpen && <SettingsDialog accountName={userName} accountEmail={userEmail} onLogout={() => { setSettingsOpen(false); void logout(); }} onClose={() => setSettingsOpen(false)} />}
     <CommandPalette open={paletteOpen} agents={crew.agents} onClose={() => setPaletteOpen(false)} onSelectAgent={crew.setSelectedAgentId} onCreateAgent={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onComputer={() => setDetailsOpen(true)} />
   </div>;
 }

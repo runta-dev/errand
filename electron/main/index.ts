@@ -122,11 +122,13 @@ ipcMain.handle("credentials:set", (_event, token: string | null) => {
 });
 ipcMain.handle("auth:status", () => authorizationStatus);
 ipcMain.handle("auth:logout", async () => {
-  if (existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0 && safeStorage.isEncryptionAvailable() && settings.endpoint) {
-    const token = safeStorage.decryptString(readFileSync(credentialFile()));
-    const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-    await net.fetch(new URL("v1/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } }).catch(() => undefined);
-  }
+  if (!existsSync(credentialFile()) || readFileSync(credentialFile()).length === 0) { authorizationStatus = "idle"; return true; }
+  if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
+  if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
+  const token = safeStorage.decryptString(readFileSync(credentialFile()));
+  const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
+  const response = await net.fetch(new URL("v1/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+  if (!response.ok && response.status !== 401) throw new Error(`Runta key revocation failed (${response.status})`);
   if (existsSync(credentialFile())) rmSync(credentialFile());
   authorizationStatus = "idle";
   return true;

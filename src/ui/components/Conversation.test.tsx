@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Agent, Message } from "@/domain/types";
 import { Conversation, MessageView } from "./Conversation";
 
@@ -15,16 +14,8 @@ describe("Conversation states", () => {
     expect(screen.queryByRole("button", { name: "Mark as useful" })).not.toBeInTheDocument();
   });
 
-  it("shows a reconnect action only when the connection is unavailable", async () => {
-    const reconnect = vi.fn(); const user = userEvent.setup();
-    render(<Conversation agent={agent} messages={[]} activities={[]} connection="disconnected" onSend={async () => undefined} onReact={async () => undefined} onReconnect={reconnect} onToggleDetails={() => undefined} />);
-    expect(screen.getByText("Connection lost")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reconnect" }));
-    expect(reconnect).toHaveBeenCalledOnce();
-  });
-
   it("does not repeat agent metadata in the empty conversation intro", () => {
-    render(<Conversation agent={agent} messages={[]} activities={[]} connection="connected" onSend={async () => undefined} onReact={async () => undefined} onReconnect={() => undefined} onToggleDetails={() => undefined} />);
+    render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onReact={async () => undefined} onToggleDetails={() => undefined} />);
     expect(screen.getByRole("heading", { name: "Atlas", level: 2 })).toBeInTheDocument();
     expect(screen.queryByText("Find the signal")).not.toBeInTheDocument();
   });

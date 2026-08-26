@@ -19,7 +19,7 @@ export function DeleteAgentDialog({ agent, onClose, onDelete }: { agent: Agent; 
   async function remove() { setDeleting(true); try { await onDelete(); onClose(); } finally { setDeleting(false); } }
   return <DialogShell title={`Delete ${agent.name}?`} onClose={onClose}><div className="delete-agent-copy"><p>This permanently removes the cloud agent and its runtime data.</p><strong>This action cannot be undone.</strong></div><div className="dialog-actions delete-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button destructive-button" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete agent"}</button></div></DialogShell>;
 }
-export function SettingsDialog({ mode = "preferences", onClose }: { mode?: "connection" | "preferences"; onClose(): void }) {
+export function SettingsDialog({ mode = "preferences", accountName = "Runta account", accountEmail = "", onLogout, onClose }: { mode?: "connection" | "preferences"; accountName?: string; accountEmail?: string; onLogout?(): void; onClose(): void }) {
   const [settings, setSettings] = useState<AppSettings>({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true });
   useEffect(() => { void window.runtaCrew?.settings.get().then(setSettings); }, []);
   async function save(event: FormEvent) {
@@ -27,14 +27,17 @@ export function SettingsDialog({ mode = "preferences", onClose }: { mode?: "conn
     document.documentElement.dataset.theme = settings.theme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : settings.theme;
     onClose();
   }
-  return <DialogShell title={mode === "connection" ? "Connection" : "Settings"} onClose={onClose}><form className="settings-form compact-settings" onSubmit={save}>
-    {mode === "connection" ? <>
+  if (mode === "connection") return <DialogShell title="Connection" onClose={onClose}><form className="settings-form compact-settings" onSubmit={save}>
       <label>API base URL<input autoFocus required type="url" value={settings.endpoint} onChange={(event) => setSettings({ ...settings, endpoint: event.target.value })} /></label>
       <label>Dashboard URL<input required type="url" value={settings.dashboardUrl} onChange={(event) => setSettings({ ...settings, dashboardUrl: event.target.value })} /></label>
-    </> : <>
-      <label>Theme<select value={settings.theme} onChange={(event) => setSettings({ ...settings, theme: event.target.value as ThemePreference })}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label>
-      <label className="checkbox"><input type="checkbox" checked={settings.notifications} onChange={(event) => setSettings({ ...settings, notifications: event.target.checked })} /> Notify me when work finishes or needs approval</label>
-    </>}
     <div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button">Save</button></div>
   </form></DialogShell>;
+  const initials = accountName.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const persist = (next: AppSettings) => { setSettings(next); void window.runtaCrew?.settings.set(next); document.documentElement.dataset.theme = next.theme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : next.theme; };
+  return <div className="dialog-backdrop settings-backdrop" role="presentation"><section className="settings-window" role="dialog" aria-modal="true" aria-label="Settings">
+    <main className="settings-content"><header><h2>Settings</h2><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button></header>
+      <section><h3>Account</h3><div className="settings-card account-card"><span className="settings-account-avatar">{initials}</span><span className="settings-account-copy"><strong>{accountName}</strong>{accountEmail && <small>{accountEmail}</small>}</span>{onLogout && <button className="settings-signout" onClick={onLogout}>Sign out</button>}</div></section>
+      <section><h3>Appearance</h3><div className="settings-card"><label className="settings-row"><span>Theme</span><select value={settings.theme} onChange={(event) => persist({ ...settings, theme: event.target.value as ThemePreference })}><option value="system">Follow System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label className="settings-row"><span>Notifications</span><input className="settings-toggle" type="checkbox" checked={settings.notifications} onChange={(event) => persist({ ...settings, notifications: event.target.checked })} /></label></div></section>
+    </main>
+  </section></div>;
 }
