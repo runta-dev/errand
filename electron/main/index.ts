@@ -148,9 +148,16 @@ ipcMain.handle("auth:start", async () => {
   authorizationStatus = "pending";
   const poll = async () => {
     let interval = Math.max(5, envelope.data.interval || 5);
+    const expiresAt = Date.parse(envelope.data.expires_at);
     while (authorizationStatus === "pending") {
       await new Promise((resolve) => setTimeout(resolve, interval * 1000));
-      const tokenResponse = await net.fetch(new URL("v1/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+      if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) { authorizationStatus = "expired"; return; }
+      let tokenResponse: Response;
+      try {
+        tokenResponse = await net.fetch(new URL("v1/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+      } catch {
+        continue;
+      }
       if (tokenResponse.ok) {
         const token = await tokenResponse.json() as { access_token: string };
         if (!safeStorage.isEncryptionAvailable()) { authorizationStatus = "error"; return; }

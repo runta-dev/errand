@@ -59,8 +59,10 @@ export function App() {
     try {
       const started = await window.runtaCrew?.auth?.start();
       if (!started) throw new Error("OAuth is unavailable in this environment.");
+      const expiresAt = Date.parse(started.expiresAt);
       while (true) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) throw new Error("Authorization expired. Try again.");
         const status = await window.runtaCrew?.auth?.status();
         if (status === "pending") continue;
         if (status === "authorized") {

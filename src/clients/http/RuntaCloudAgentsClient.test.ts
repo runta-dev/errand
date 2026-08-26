@@ -8,7 +8,7 @@ afterEach(() => { delete window.runtaCrew; });
 
 describe("RuntaCloudAgentsClient", () => {
   it("maps a missing local token to a normal authentication error", async () => {
-    window.runtaCrew = { cloud: { request: async () => { throw new Error("Error invoking remote method 'cloud:request': Error: Runta API token is not configured"); } }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+    window.runtaCrew = { cloud: { request: async () => { throw new Error("Error invoking remote method 'cloud:request': Error: Runta API token is not configured"); }, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
     await expect(new RuntaCloudAgentsClient().listAgents()).rejects.toMatchObject({ code: "unauthorized", message: "Authentication is required" });
   });
 

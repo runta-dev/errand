@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentsLanding, App } from "./App";
 import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
@@ -80,7 +80,7 @@ describe("Runta Crew authentication surfaces", () => {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
       settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
-      cloud: { request: cloudRequest },
+      cloud: { request: cloudRequest, subscribe: () => () => undefined },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
     };
