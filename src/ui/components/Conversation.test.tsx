@@ -22,4 +22,10 @@ describe("Conversation states", () => {
     await user.click(screen.getByRole("button", { name: "Reconnect" }));
     expect(reconnect).toHaveBeenCalledOnce();
   });
+
+  it("does not repeat agent metadata in the empty conversation intro", () => {
+    render(<Conversation agent={agent} messages={[]} activities={[]} connection="connected" onSend={async () => undefined} onReact={async () => undefined} onReconnect={() => undefined} onToggleDetails={() => undefined} />);
+    expect(screen.getByRole("heading", { name: "Atlas", level: 2 })).toBeInTheDocument();
+    expect(screen.queryByText("Find the signal")).not.toBeInTheDocument();
+  });
 });

@@ -47,7 +47,7 @@ export class HttpCloudAgentsClient implements CloudAgentsClient {
   listApprovalRequests(_agentId?: string, signal?: AbortSignal) { return this.request<ApprovalRequest[]>(this.route((r) => r.approvals), { signal }); }
   respondToApproval(input: RespondApprovalInput, signal?: AbortSignal) { return this.request<ApprovalRequest>(this.route((r) => r.respondToApproval(input.requestId)), { method: "POST", body: JSON.stringify(input), signal }); }
   getComputer(id: string, signal?: AbortSignal) { return this.request<CloudComputer>(this.route((r) => r.computer(id)), { signal }); }
-  openComputer(id: string, signal?: AbortSignal) { return this.request<{ url?: string; mode: "mock" | "remote" }>(this.route((r) => r.openComputer(id)), { method: "POST", signal }); }
-  takeOverComputer(id: string, signal?: AbortSignal) { return this.request<{ url?: string; mode: "mock" | "remote" }>(this.route((r) => r.takeOverComputer(id)), { method: "POST", signal }); }
+  openComputer(id: string, signal?: AbortSignal) { return this.request<{ url: string; mode: "remote" }>(this.route((r) => r.openComputer(id)), { method: "POST", signal }); }
+  takeOverComputer(id: string, signal?: AbortSignal) { return this.request<{ url: string; mode: "remote" }>(this.route((r) => r.takeOverComputer(id)), { method: "POST", signal }); }
   async reconnect(signal?: AbortSignal) { await this.listAgents(signal); }
 }

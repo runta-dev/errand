@@ -16,7 +16,7 @@ export interface CloudAgentsClient {
   listApprovalRequests(agentId?: string, signal?: AbortSignal): Promise<ApprovalRequest[]>;
   respondToApproval(input: RespondApprovalInput, signal?: AbortSignal): Promise<ApprovalRequest>;
   getComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputer>;
-  openComputer(agentId: string, signal?: AbortSignal): Promise<{ url?: string; mode: "mock" | "remote" }>;
-  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<{ url?: string; mode: "mock" | "remote" }>;
+  openComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
+  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
   reconnect(signal?: AbortSignal): Promise<void>;
 }

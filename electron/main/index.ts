@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, safeStorage, shell } from "electron";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -8,7 +8,7 @@ const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_S
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-const defaultSettings: AppSettings = { endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
+const defaultSettings: AppSettings = { endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
@@ -50,7 +50,7 @@ function createWindow() {
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 18, y: 18 },
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
@@ -123,7 +123,7 @@ ipcMain.handle("auth:logout", async () => {
   if (existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0 && safeStorage.isEncryptionAvailable() && settings.endpoint) {
     const token = safeStorage.decryptString(readFileSync(credentialFile()));
     const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-    await fetch(new URL("v1/auth/token", apiBase), { method: "DELETE", headers: { authorization: `Bearer ${token}` } }).catch(() => undefined);
+    await net.fetch(new URL("v1/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } }).catch(() => undefined);
   }
   if (existsSync(credentialFile())) rmSync(credentialFile());
   authorizationStatus = "idle";
@@ -132,7 +132,7 @@ ipcMain.handle("auth:logout", async () => {
 ipcMain.handle("auth:start", async () => {
   if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-  const response = await fetch(new URL("v1/auth/device/authorization", apiBase), {
+  const response = await net.fetch(new URL("v1/auth/device/authorization", apiBase).toString(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: "runta_crew", device_name: `Runta Crew on ${process.platform}`, app_url: settings.dashboardUrl.replace(/\/+$/, "") }),
@@ -144,12 +144,14 @@ ipcMain.handle("auth:start", async () => {
     let interval = Math.max(5, envelope.data.interval || 5);
     while (authorizationStatus === "pending") {
       await new Promise((resolve) => setTimeout(resolve, interval * 1000));
-      const tokenResponse = await fetch(new URL("v1/auth/device/token", apiBase), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+      const tokenResponse = await net.fetch(new URL("v1/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
       if (tokenResponse.ok) {
         const token = await tokenResponse.json() as { access_token: string };
         if (!safeStorage.isEncryptionAvailable()) { authorizationStatus = "error"; return; }
         writeFileSync(credentialFile(), safeStorage.encryptString(token.access_token), { mode: 0o600 });
         authorizationStatus = "authorized";
+        if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+        if (process.platform === "darwin") app.focus({ steal: true });
         return;
       }
       const error = await tokenResponse.json().catch(() => ({})) as { error?: string; interval?: number };
@@ -173,7 +175,7 @@ ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
   const url = new URL(request.path.replace(/^\/+/, ""), endpoint);
   const apiPrefix = `${endpoint.pathname.replace(/\/+$/, "")}/v1/`;
   if (url.origin !== endpoint.origin || !url.pathname.startsWith(apiPrefix)) throw new Error("Cloud request path is not allowed");
-  const response = await fetch(url, {
+  const response = await net.fetch(url.toString(), {
     method: request.method,
     headers: { authorization: `Bearer ${token}`, ...(request.body === undefined ? {} : { "content-type": "application/json" }) },
     body: request.body === undefined ? undefined : JSON.stringify(request.body),
@@ -192,7 +194,7 @@ ipcMain.handle("attachments:choose", async () => {
     const id = randomUUID(); selectedAttachmentPaths.set(id, path);
     return [{ id, name: basename(path), size, mediaType: mediaTypeForPath(path) }];
   });
-  if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB in this preview." });
+  if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB." });
   return attachments;
 });
 ipcMain.handle("notifications:show", (event, value: { title?: unknown; body?: unknown }) => {
