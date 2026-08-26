@@ -2,12 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
+import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew primary flows", () => {
   it("switches agents and handles a scoped approval", async () => {
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: /Mira/ }));
+    await user.click(screen.getByRole("button", { name: /^M Mira Needs approval 1$/ }));
     await screen.findByText("Submit vendor renewal");
     await user.type(screen.getByLabelText("Approval note"), "Approved for this form only");
     await user.click(screen.getByRole("button", { name: "Allow once" }));
@@ -39,5 +40,57 @@ describe("Runta Crew primary flows", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("heading", { name: "Patch", level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+  });
+
+  it("selects a local attachment through the typed desktop bridge and sends it", async () => {
+    const bridge: DesktopBridge = {
+      getVersion: async () => "0.1.0", openExternal: async () => undefined,
+      settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => true },
+      attachments: { choose: async () => [{ id: "selected-1", name: "brief.pdf", size: 4200, mediaType: "application/pdf" }] },
+      notifications: { show: async () => true, setBadge: async () => undefined },
+    };
+    window.runtaCrew = bridge;
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    await user.click(screen.getByRole("button", { name: "Attach files" }));
+    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Message Atlas"), "Please review this brief");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("Please review this brief")).toBeInTheDocument();
+    expect(screen.getByText("4.1 KB · application/pdf")).toBeInTheDocument();
+    delete window.runtaCrew;
+  });
+
+  it("records useful feedback on an agent message", async () => {
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    await screen.findByText(/I’m grouping the feedback/);
+    const reaction = screen.getByRole("button", { name: "Mark as useful" });
+    expect(reaction).toHaveAttribute("aria-pressed", "false"); await user.click(reaction);
+    await waitFor(() => expect(reaction).toHaveAttribute("aria-pressed", "true"));
+    expect(reaction).toHaveTextContent("1");
+  });
+
+  it("edits and marks an agent read from scoped row actions", async () => {
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
+    await user.click(screen.getByRole("menuitem", { name: "Mark as read" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Atlas Working in cloud computer/ })).not.toHaveTextContent("2"));
+    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit agent" }));
+    const name = screen.getByLabelText("Name"); await user.clear(name); await user.type(name, "Atlas Prime");
+    await user.click(screen.getByRole("button", { name: "Save agent" }));
+    expect(await screen.findByRole("heading", { name: "Atlas Prime", level: 1 })).toBeInTheDocument();
+  });
+
+  it("duplicates and safely deletes an agent", async () => {
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    await user.click(screen.getByRole("button", { name: "More actions for Patch" }));
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    expect(await screen.findByRole("heading", { name: "Patch copy", level: 1 })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions for Patch copy" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete agent" }));
+    expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete agent" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "More actions for Patch copy" })).not.toBeInTheDocument());
   });
 });

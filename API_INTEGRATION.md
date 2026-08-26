@@ -9,8 +9,10 @@ The backend contract must support:
 | Client operation | Required behavior |
 | --- | --- |
 | `listAgents`, `getAgent`, `createAgent` | Named agents, role/goal, status, timestamps, unread/approval counters, computer association |
+| `updateAgent`, `deleteAgent`, `duplicateAgent`, `setAgentUnread` | Optimistic concurrency/version, deletion cleanup, duplication semantics and per-user preferences |
 | `listConversations`, `getConversation` | Stable conversation identity and ordered message history |
 | `sendMessage` | Idempotency key, accepted message, and subsequent stream identity |
+| `reactToMessage` | Supported reaction vocabulary, toggle/idempotency behavior and multi-device counts |
 | `subscribeToConversationEvents` | Resume cursor, ordering, heartbeat, message deltas/completion, activity, approvals, connection events |
 | `listApprovalRequests`, `respondToApproval` | Explicit action scope, decision, optional note, actor, audit timestamp, single-use semantics |
 | `getComputer` | Runtime state, active app/tool, preview availability, supported actions |
@@ -39,3 +41,5 @@ The domain currently understands `message.created`, `message.delta`, `message.co
 ## Credential handling
 
 Tokens entered in Settings are encrypted using Electron `safeStorage` and written with user-only file permissions. The preload exposes `has` and `set`, not credential reads. Production API requests should be made by a main-process broker that decrypts only for the outbound request.
+
+Local file selection currently returns only an opaque ID and safe metadata to the renderer. The main process retains the path in memory. `HttpCloudAgentsClient` deliberately rejects these local selections until the backend defines upload creation/finalization, size limits, checksums, and how an opaque desktop selection becomes a cloud attachment ID.

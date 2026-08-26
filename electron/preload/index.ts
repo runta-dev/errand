@@ -12,6 +12,11 @@ const bridge: DesktopBridge = {
     has: () => ipcRenderer.invoke("credentials:has"),
     set: (token) => ipcRenderer.invoke("credentials:set", token),
   },
+  attachments: { choose: () => ipcRenderer.invoke("attachments:choose") },
+  notifications: {
+    show: (notification) => ipcRenderer.invoke("notifications:show", notification),
+    setBadge: (count) => ipcRenderer.invoke("notifications:setBadge", count),
+  },
 };
 
 contextBridge.exposeInMainWorld("runtaCrew", bridge);

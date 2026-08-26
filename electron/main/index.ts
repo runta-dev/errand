@@ -1,12 +1,19 @@
-import { app, BrowserWindow, ipcMain, Menu, safeStorage, shell } from "electron";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, safeStorage, shell } from "electron";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { extname, join, basename } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { AppSettings } from "../../src/shared/desktop";
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
 let settings: AppSettings = { endpoint: "", theme: "light", notifications: true };
+const selectedAttachmentPaths = new Map<string, string>();
+
+function mediaTypeForPath(path: string): string {
+  const types: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json", ".csv": "text/csv" };
+  return types[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
 
 function loadSettings(): AppSettings {
   if (!existsSync(settingsFile())) return settings;
@@ -77,4 +84,26 @@ ipcMain.handle("credentials:set", (_event, token: string | null) => {
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
   writeFileSync(credentialFile(), safeStorage.encryptString(token), { mode: 0o600 });
   return true;
+});
+ipcMain.handle("attachments:choose", async () => {
+  const result = await dialog.showOpenDialog({ title: "Attach files to your message", properties: ["openFile", "multiSelections"], filters: [{ name: "Supported files", extensions: ["png", "jpg", "jpeg", "gif", "webp", "pdf", "txt", "md", "json", "csv"] }] });
+  if (result.canceled) return [];
+  const attachments = result.filePaths.flatMap((path) => {
+    const size = statSync(path).size;
+    if (size > 25 * 1024 * 1024) return [];
+    const id = randomUUID(); selectedAttachmentPaths.set(id, path);
+    return [{ id, name: basename(path), size, mediaType: mediaTypeForPath(path) }];
+  });
+  if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB in this preview." });
+  return attachments;
+});
+ipcMain.handle("notifications:show", (event, value: { title?: unknown; body?: unknown }) => {
+  const title = typeof value?.title === "string" ? value.title.slice(0, 120) : "";
+  const body = typeof value?.body === "string" ? value.body.slice(0, 500) : "";
+  const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!settings.notifications || !title || !body || !Notification.isSupported() || sourceWindow?.isFocused()) return false;
+  new Notification({ title, body }).show(); return true;
+});
+ipcMain.handle("notifications:setBadge", (_event, count: number) => {
+  if (process.platform === "darwin" && app.dock) app.dock.setBadge(Number.isSafeInteger(count) && count > 0 ? String(Math.min(count, 99)) : "");
 });
