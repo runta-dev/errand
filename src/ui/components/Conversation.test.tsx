@@ -27,10 +27,11 @@ describe("Conversation states", () => {
   });
 
   it("shows a skeleton instead of the empty conversation while history loads", () => {
-    render(<Conversation agent={agent} messages={[]} activities={[]} loading onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    const { container } = render(<Conversation agent={agent} messages={[]} activities={[]} loading onSend={async () => undefined} onToggleDetails={() => undefined} />);
     expect(screen.getByRole("status", { name: "Loading conversation history" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Atlas", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message Atlas" })).toBeInTheDocument();
+    expect(container.querySelector(".skeleton-bubble")?.parentElement).toHaveClass("skeleton-user");
   });
 
   it("shows the animated agent avatar before the first token arrives", () => {
