@@ -49,4 +49,29 @@ describe("useCrewController", () => {
     await waitFor(() => expect(result.current.messages[0]?.parts[0]).toEqual({ type: "text", text: "Atlas cached" }));
     expect(getConversation.mock.calls.map(([id]) => id)).toEqual(["conversation-atlas", "conversation-scout"]);
   });
+
+  it("optimistically renders the user message and working agent before the request resolves", async () => {
+    let resolveSend!: (message: Message) => void;
+    const pendingSend = new Promise<Message>((resolve) => { resolveSend = resolve; });
+    const listeners = new Map<string, (event: ConversationEvent) => void>();
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas")],
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation: async (id) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date(0).toISOString() }, messages: [] }),
+      sendMessage: async () => pendingSend, subscribeToConversationEvents: (id, listener) => { listeners.set(id, listener); return { unsubscribe: () => undefined }; }, listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
+    await waitFor(() => expect(listeners.has("conversation-atlas")).toBe(true));
+    let send!: Promise<void>;
+    act(() => { send = result.current.sendMessage("hello"); });
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }] });
+    expect(result.current.messages[1]).toMatchObject({ role: "agent", streaming: true });
+
+    await act(async () => { resolveSend({ id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
+    expect(result.current.messages[0]?.id).toBe("run-1:user");
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString() } }));
+    expect(result.current.messages.map((message) => message.id)).toEqual(["run-1:user", "run-1:agent"]);
+  });
 });

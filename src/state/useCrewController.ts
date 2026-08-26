@@ -9,6 +9,8 @@ function agentMessagePreview(message?: Message): string {
 
 interface AgentSnapshot { messages: Message[]; approvals: ApprovalRequest[]; computer?: CloudComputer; cachedAt: number }
 const SNAPSHOT_TTL_MS = 60_000;
+const OPTIMISTIC_USER_PREFIX = "optimistic-user:";
+const OPTIMISTIC_AGENT_PREFIX = "optimistic-agent:";
 
 export function useCrewController(client: CloudAgentsClient) {
   const [agents, setAgents] = useState<Agent[]>([]); const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -62,16 +64,23 @@ export function useCrewController(client: CloudAgentsClient) {
     const subscription = client.subscribeToConversationEvents(conversationId, (event: ConversationEvent) => {
       if (!active) return;
       if (event.type === "message.created") {
-        updateMessages((current) => current.some((message) => message.id === event.message.id) ? current : [...current, event.message]);
+        updateMessages((current) => {
+          const withoutPlaceholder = event.message.role === "agent" ? current.filter((message) => !message.id.startsWith(OPTIMISTIC_AGENT_PREFIX)) : current;
+          return withoutPlaceholder.some((message) => message.id === event.message.id) ? withoutPlaceholder : [...withoutPlaceholder, event.message];
+        });
         if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
       }
       if (event.type === "message.delta") {
-        updateMessages((current) => current.map((message) => message.id === event.messageId ? { ...message, parts: message.parts.map((part, index) => index === 0 && part.type === "text" ? { ...part, text: part.text + event.delta } : part) } : message));
+        updateMessages((current) => {
+          const withoutPlaceholder = current.filter((message) => !message.id.startsWith(OPTIMISTIC_AGENT_PREFIX));
+          if (!withoutPlaceholder.some((message) => message.id === event.messageId)) return [...withoutPlaceholder, { id: event.messageId, conversationId, role: "agent", parts: [{ type: "text", text: event.delta }], createdAt: new Date().toISOString(), streaming: true }];
+          return withoutPlaceholder.map((message) => message.id === event.messageId ? { ...message, parts: message.parts.map((part, index) => index === 0 && part.type === "text" ? { ...part, text: part.text + event.delta } : part) } : message);
+        });
         setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: `${agent.lastMessagePreview ?? ""}${event.delta}` } : agent));
       }
       if (event.type === "message.completed") { updateMessages((current) => current.map((message) => message.id === event.messageId ? { ...message, streaming: false } : message)); void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." }); }
       if (event.type === "message.updated") {
-        updateMessages((current) => current.map((message) => message.id === event.message.id ? event.message : message));
+        updateMessages((current) => { const withoutPlaceholder = event.message.role === "agent" ? current.filter((message) => !message.id.startsWith(OPTIMISTIC_AGENT_PREFIX)) : current; return withoutPlaceholder.some((message) => message.id === event.message.id) ? withoutPlaceholder.map((message) => message.id === event.message.id ? event.message : message) : [...withoutPlaceholder, event.message]; });
         if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
       }
       if (event.type === "approval.updated") { setApprovals((current) => { const next = current.map((approval) => approval.id === event.approval.id ? event.approval : approval); const snapshot = snapshots.current.get(selectedAgentId); snapshots.current.set(selectedAgentId, { messages: snapshot?.messages ?? [], approvals: next, computer: snapshot?.computer, cachedAt: Date.now() }); return next; }); if (event.approval.status === "pending") void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} needs approval`, body: event.approval.title }); }
@@ -88,7 +97,31 @@ export function useCrewController(client: CloudAgentsClient) {
     deleteAgent: async (agentId: string) => { await client.deleteAgent(agentId); snapshots.current.delete(agentId); await refreshAgents(); },
     duplicateAgent: async (agentId: string) => { const agent = await client.duplicateAgent(agentId); await refreshAgents(); setSelectedAgentId(agent.id); },
     setAgentUnread: async (agentId: string, unread: boolean) => { await client.setAgentUnread(agentId, unread); await refreshAgents(); },
-    sendMessage: async (text: string, attachments: Attachment[] = []) => { if (!conversationId || !selectedAgentId) return; const targetAgentId = selectedAgentId; const targetConversationId = conversationId; const message = await client.sendMessage({ conversationId: targetConversationId, text, attachments }); const snapshot = snapshots.current.get(targetAgentId) ?? { messages: [], approvals: [], cachedAt: Date.now() }; const nextMessages = snapshot.messages.some((item) => item.id === message.id) ? snapshot.messages : [...snapshot.messages, message]; snapshots.current.set(targetAgentId, { ...snapshot, messages: nextMessages, cachedAt: Date.now() }); if (selectedAgentIdRef.current === targetAgentId) { setMessages(nextMessages); setLiveAgentId(targetAgentId); } },
+    sendMessage: async (text: string, attachments: Attachment[] = []) => {
+      if (!conversationId || !selectedAgentId) return;
+      const targetAgentId = selectedAgentId; const targetConversationId = conversationId; const nonce = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      const optimisticUserId = `${OPTIMISTIC_USER_PREFIX}${nonce}`; const optimisticAgentId = `${OPTIMISTIC_AGENT_PREFIX}${nonce}`; const createdAt = new Date().toISOString();
+      const optimisticUser: Message = { id: optimisticUserId, conversationId: targetConversationId, role: "user", parts: [...(text ? [{ type: "text" as const, text }] : []), ...attachments.map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt };
+      const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
+      const snapshot = snapshots.current.get(targetAgentId) ?? { messages: [], approvals: [], cachedAt: Date.now() };
+      const optimisticMessages = [...snapshot.messages, optimisticUser, optimisticAgent];
+      snapshots.current.set(targetAgentId, { ...snapshot, messages: optimisticMessages, cachedAt: Date.now() });
+      if (selectedAgentIdRef.current === targetAgentId) { setMessages(optimisticMessages); setLiveAgentId(targetAgentId); }
+      try {
+        const message = await client.sendMessage({ conversationId: targetConversationId, text, attachments });
+        const latest = snapshots.current.get(targetAgentId) ?? snapshot;
+        const reconciled = latest.messages.map((item) => item.id === optimisticUserId ? message : item).filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
+        snapshots.current.set(targetAgentId, { ...latest, messages: reconciled, cachedAt: Date.now() });
+        if (selectedAgentIdRef.current === targetAgentId) setMessages(reconciled);
+      } catch (reason) {
+        const latest = snapshots.current.get(targetAgentId) ?? snapshot;
+        const rolledBack = latest.messages.filter((message) => message.id !== optimisticUserId && message.id !== optimisticAgentId);
+        snapshots.current.set(targetAgentId, { ...latest, messages: rolledBack, cachedAt: Date.now() });
+        if (selectedAgentIdRef.current === targetAgentId) setMessages(rolledBack);
+        setError(reason instanceof Error ? reason.message : "Could not send message");
+        throw reason;
+      }
+    },
     respondToApproval: async (requestId: string, decision: "allow" | "deny", note?: string) => { const targetAgentId = selectedAgentId; const next = await client.respondToApproval({ requestId, decision, note }); const snapshot = snapshots.current.get(targetAgentId); const nextApprovals = (snapshot?.approvals ?? []).map((item) => item.id === next.id ? next : item); if (snapshot) snapshots.current.set(targetAgentId, { ...snapshot, approvals: nextApprovals, cachedAt: Date.now() }); if (selectedAgentIdRef.current === targetAgentId) setApprovals(nextApprovals); },
     openComputer: async (action: "open" | "takeover") => { if (!selectedAgentId) throw new Error("No agent is selected"); try { return await (action === "open" ? client.openComputer(selectedAgentId) : client.takeOverComputer(selectedAgentId)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not open cloud computer"); throw reason; } },
     reconnect: async () => { setConnection("connecting"); try { await client.reconnect(); await refreshAgents(); setConnection("connected"); } catch (reason) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Reconnect failed"); } },
