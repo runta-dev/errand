@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
+import { AgentList } from "./components/AgentList";
 import type { DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew primary flows", () => {
@@ -122,9 +123,10 @@ describe("Runta Crew primary flows", () => {
       deepLinks: { onOpenAgent: () => () => undefined },
     };
     window.runtaCrew = bridge;
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
+    const user = userEvent.setup();
+    render(<AgentList agents={[]} selectedId="" search="" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
 
-    const account = screen.getByRole("button", { name: "Runta account" });
+    const account = screen.getByRole("button", { name: "Shiqi Mei" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     await user.click(account);
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([" Settings", " Join Discord", " Logout"]);
@@ -136,6 +138,29 @@ describe("Runta Crew primary flows", () => {
     await user.click(account);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    delete window.runtaCrew;
+  });
+
+  it("shows OAuth sign-in instead of a fake account when no session exists", async () => {
+    const bridge: DesktopBridge = {
+      getVersion: async () => "0.1.0", openExternal: async () => undefined,
+      settings: { get: async () => ({ endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
+      notifications: { show: async () => true, setBadge: async () => undefined },
+      deepLinks: { onOpenAgent: () => () => undefined },
+    };
+    window.runtaCrew = bridge;
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Runta Crew", level: 1 });
+    expect(screen.queryByRole("heading", { name: "Atlas", level: 1 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Runta account" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connection settings" })).not.toBeInTheDocument();
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(window, { key: "Control" });
+    await user.click(screen.getByRole("button", { name: "Connection settings" }));
+    expect(await screen.findByRole("dialog", { name: "Connection" })).toBeInTheDocument();
+    expect(screen.getByLabelText("API base URL")).toHaveValue("https://app.forge/api");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     delete window.runtaCrew;
   });
 });

@@ -12,7 +12,7 @@ export interface DesktopBridge {
   openExternal(url: string): Promise<void>;
   settings: { get(): Promise<AppSettings>; set(settings: AppSettings): Promise<AppSettings> };
   credentials: { has(): Promise<boolean>; set(token: string | null): Promise<boolean> };
-  auth?: { start(): Promise<DeviceAuthorizationStart>; status(): Promise<DeviceAuthorizationStatus> };
+  auth?: { start(): Promise<DeviceAuthorizationStart>; status(): Promise<DeviceAuthorizationStatus>; logout(): Promise<boolean> };
   cloud?: { request(request: CloudRequest): Promise<CloudResponse> };
   attachments: { choose(): Promise<SelectedAttachment[]> };
   notifications: { show(notification: DesktopNotification): Promise<boolean>; setBadge(count: number): Promise<void> };

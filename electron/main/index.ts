@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, shell } from "electron";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AppSettings, CloudRequest, DeviceAuthorizationStatus } from "../../src/shared/desktop";
@@ -8,7 +8,8 @@ const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_S
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-let settings: AppSettings = { endpoint: "", dashboardUrl: "", theme: "light", notifications: true };
+const defaultSettings: AppSettings = { endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
+let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
 let mainWindow: BrowserWindow | undefined;
@@ -35,14 +36,14 @@ function loadSettings(): AppSettings {
   try {
     const value = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<AppSettings>;
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
-    return { endpoint: typeof value.endpoint === "string" ? value.endpoint : "", dashboardUrl: typeof value.dashboardUrl === "string" ? value.dashboardUrl : "", notifications: value.notifications !== false, theme };
+    return { endpoint: typeof value.endpoint === "string" && value.endpoint.trim() ? value.endpoint : defaultSettings.endpoint, dashboardUrl: typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme };
   } catch { return settings; }
 }
 
 function createWindow() {
   const requestedSize = process.env.RUNTA_CREW_WINDOW_SIZE?.match(/^(\d+)x(\d+)$/);
-  const width = requestedSize ? Math.max(960, Number(requestedSize[1])) : 1440;
-  const height = requestedSize ? Math.max(640, Number(requestedSize[2])) : 920;
+  const width = requestedSize ? Math.max(960, Number(requestedSize[1])) : 1040;
+  const height = requestedSize ? Math.max(640, Number(requestedSize[2])) : 760;
   const window = new BrowserWindow({
     width, height, minWidth: 960, minHeight: 640,
     title: "Runta Crew", backgroundColor: "#f7f6f3",
@@ -107,14 +108,24 @@ ipcMain.handle("desktop:openExternal", (_event, url: string) => {
 });
 ipcMain.handle("settings:get", () => settings);
 ipcMain.handle("settings:set", (_event, next: AppSettings) => { settings = next; writeFileSync(settingsFile(), JSON.stringify(settings, null, 2), { mode: 0o600 }); return settings; });
-ipcMain.handle("credentials:has", () => existsSync(credentialFile()));
+ipcMain.handle("credentials:has", () => existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0);
 ipcMain.handle("credentials:set", (_event, token: string | null) => {
-  if (!token) { if (existsSync(credentialFile())) writeFileSync(credentialFile(), Buffer.alloc(0)); return false; }
+  if (!token) { if (existsSync(credentialFile())) rmSync(credentialFile()); authorizationStatus = "idle"; return false; }
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
   writeFileSync(credentialFile(), safeStorage.encryptString(token), { mode: 0o600 });
   return true;
 });
 ipcMain.handle("auth:status", () => authorizationStatus);
+ipcMain.handle("auth:logout", async () => {
+  if (existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0 && safeStorage.isEncryptionAvailable() && settings.endpoint) {
+    const token = safeStorage.decryptString(readFileSync(credentialFile()));
+    const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
+    await fetch(new URL("v1/auth/token", apiBase), { method: "DELETE", headers: { authorization: `Bearer ${token}` } }).catch(() => undefined);
+  }
+  if (existsSync(credentialFile())) rmSync(credentialFile());
+  authorizationStatus = "idle";
+  return true;
+});
 ipcMain.handle("auth:start", async () => {
   if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;

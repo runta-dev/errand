@@ -15,6 +15,7 @@ const bridge: DesktopBridge = {
   auth: {
     start: () => ipcRenderer.invoke("auth:start"),
     status: () => ipcRenderer.invoke("auth:status"),
+    logout: () => ipcRenderer.invoke("auth:logout"),
   },
   cloud: { request: (request) => ipcRenderer.invoke("cloud:request", request) },
   attachments: { choose: () => ipcRenderer.invoke("attachments:choose") },
