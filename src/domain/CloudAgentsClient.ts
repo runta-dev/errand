@@ -1,4 +1,4 @@
-import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderOption, ReactToMessageInput, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
+import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderOption, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
 
 export interface CloudAgentsClient {
   listModelProviders(signal?: AbortSignal): Promise<ModelProviderOption[]>;
@@ -12,7 +12,6 @@ export interface CloudAgentsClient {
   listConversations(agentId: string, signal?: AbortSignal): Promise<Conversation[]>;
   getConversation(conversationId: string, signal?: AbortSignal): Promise<{ conversation: Conversation; messages: Message[] }>;
   sendMessage(input: SendMessageInput): Promise<Message>;
-  reactToMessage(input: ReactToMessageInput, signal?: AbortSignal): Promise<Message>;
   subscribeToConversationEvents(conversationId: string, listener: (event: ConversationEvent) => void): Subscription;
   listApprovalRequests(agentId?: string, signal?: AbortSignal): Promise<ApprovalRequest[]>;
   respondToApproval(input: RespondApprovalInput, signal?: AbortSignal): Promise<ApprovalRequest>;

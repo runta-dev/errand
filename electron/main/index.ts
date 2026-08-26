@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notificati
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { AppSettings, CloudRequest, DeviceAuthorizationStatus } from "../../src/shared/desktop";
+import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationStatus } from "../../src/shared/desktop";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -12,6 +12,8 @@ const defaultSettings: AppSettings = { endpoint: "https://api.forge", dashboardU
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
+const cloudStreams = new Map<string, AbortController>();
+const cloudStreamSenders = new Set<number>();
 let mainWindow: BrowserWindow | undefined;
 let pendingDeepLinkAgentId: string | undefined;
 
@@ -189,6 +191,42 @@ ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
   if (text) { try { body = JSON.parse(text) as unknown; } catch { body = text; } }
   return { status: response.status, body };
 });
+ipcMain.on("cloud:stream:subscribe", (event, value: { subscriptionId?: unknown; path?: unknown }) => {
+  const subscriptionId = typeof value?.subscriptionId === "string" && /^\d{1,10}$/.test(value.subscriptionId) ? value.subscriptionId : undefined;
+  const path = typeof value?.path === "string" && /^\/v1\/agents\/[A-Za-z0-9._-]{1,160}\/runs\/[A-Za-z0-9._-]{1,160}\/events(?:\?after=-?\d+)?$/.test(value.path) ? value.path : undefined;
+  if (!subscriptionId || !path) return;
+  const senderId = event.sender.id; const key = `${senderId}:${subscriptionId}`;
+  if (!cloudStreamSenders.has(senderId)) {
+    cloudStreamSenders.add(senderId);
+    event.sender.once("destroyed", () => { for (const [candidate, stream] of cloudStreams) { if (candidate.startsWith(`${senderId}:`)) { stream.abort(); cloudStreams.delete(candidate); } } cloudStreamSenders.delete(senderId); });
+  }
+  if ([...cloudStreams.keys()].filter((candidate) => candidate.startsWith(`${senderId}:`)).length >= 16) return;
+  cloudStreams.get(key)?.abort();
+  const controller = new AbortController(); cloudStreams.set(key, controller);
+  const send = (streamEvent: CloudStreamEvent) => { if (!event.sender.isDestroyed()) event.sender.send("cloud:stream:event", { subscriptionId, ...streamEvent }); };
+  void (async () => {
+    try {
+      if (!settings.endpoint || !existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("Runta API token is not configured");
+      const endpoint = new URL(`${settings.endpoint.replace(/\/+$/, "")}/`); const url = new URL(path.replace(/^\/+/, ""), endpoint);
+      const token = safeStorage.decryptString(readFileSync(credentialFile()));
+      const response = await net.fetch(url.toString(), { headers: { authorization: `Bearer ${token}`, accept: "text/event-stream" }, signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(`Cloud event stream failed (${response.status})`);
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
+      const dispatch = (block: string) => {
+        let eventName = "message"; let id: string | undefined; const data: string[] = [];
+        for (const line of block.split(/\r?\n/)) { if (line.startsWith("event:")) eventName = line.slice(6).trim(); else if (line.startsWith("id:")) id = line.slice(3).trim(); else if (line.startsWith("data:")) data.push(line.slice(5).trimStart()); }
+        if (!data.length) return; const text = data.join("\n"); let parsed: unknown = text; try { parsed = JSON.parse(text) as unknown; } catch { /* preserve non-JSON SSE data */ }
+        send({ event: eventName, id, data: parsed });
+      };
+      while (!controller.signal.aborted) {
+        const { done, value: chunk } = await reader.read(); if (done) break; buffer += decoder.decode(chunk, { stream: true });
+        const blocks = buffer.split(/\r?\n\r?\n/); buffer = blocks.pop() ?? ""; for (const block of blocks) dispatch(block);
+      }
+    } catch (reason) { if (!controller.signal.aborted) send({ event: "error", data: reason instanceof Error ? reason.message : "Cloud event stream failed" }); }
+    finally { if (cloudStreams.get(key) === controller) cloudStreams.delete(key); }
+  })();
+});
+ipcMain.on("cloud:stream:unsubscribe", (event, subscriptionId: unknown) => { if (typeof subscriptionId !== "string") return; const key = `${event.sender.id}:${subscriptionId}`; cloudStreams.get(key)?.abort(); cloudStreams.delete(key); });
 ipcMain.handle("attachments:choose", async () => {
   const result = await dialog.showOpenDialog({ title: "Attach files to your message", properties: ["openFile", "multiSelections"], filters: [{ name: "Supported files", extensions: ["png", "jpg", "jpeg", "gif", "webp", "pdf", "txt", "md", "json", "csv"] }] });
   if (result.canceled) return [];

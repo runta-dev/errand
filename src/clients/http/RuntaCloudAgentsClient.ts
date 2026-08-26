@@ -1,8 +1,8 @@
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import { CrewError, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderOption, type ReactToMessageInput, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
-import type { CloudRequest } from "@/shared/desktop";
+import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderOption, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
+import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
-interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number }
+interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
 interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 
@@ -11,6 +11,35 @@ const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ?
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 const status = (value: string): Agent["status"] => value === "running" ? "idle" : value === "pending" ? "working" : "offline";
 const terminalRunStatuses = new Set(["finished", "failed", "cancelled"]);
+
+function stringValue(value: unknown): string | undefined { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
+function toolActivityKind(value: string): ActivityEvent["kind"] {
+  const normalized = value.toLowerCase();
+  if (/browser|web|fetch|url/.test(normalized)) return "browser";
+  if (/terminal|command|shell|bash|exec|run/.test(normalized)) return "terminal";
+  if (/file|read|write|edit|patch|search|grep|glob/.test(normalized)) return "file";
+  if (/agent|task|handoff/.test(normalized)) return "handoff";
+  return "status";
+}
+function toolActivityTitle(value: string): string {
+  const normalized = value.toLowerCase();
+  if (/read|cat|view/.test(normalized)) return "Reading file";
+  if (/write|edit|patch|create/.test(normalized)) return "Editing file";
+  if (/search|grep|glob|find/.test(normalized)) return "Searching files";
+  if (/terminal|command|shell|bash|exec|run/.test(normalized)) return "Running command";
+  if (/browser|web|fetch|url/.test(normalized)) return "Browsing web";
+  if (/agent|task|handoff/.test(normalized)) return "Running agent";
+  return value.trim() || "Working";
+}
+function activityFromToolUpdate(update: Record<string, unknown>, conversationIdValue: string): ActivityEvent | undefined {
+  if (typeof update.sessionUpdate !== "string" || !/tool[_-]?call(?:[_-]?update)?/i.test(update.sessionUpdate)) return undefined;
+  const id = stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id);
+  if (!id) return undefined;
+  const rawTitle = stringValue(update.title) ?? stringValue(update.name) ?? stringValue(update.kind) ?? "Working";
+  const rawStatus = stringValue(update.status)?.toLowerCase() ?? "running";
+  const status: ActivityEvent["status"] = /fail|error/.test(rawStatus) ? "failed" : /complete|finish|done/.test(rawStatus) ? "completed" : "running";
+  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`), title: toolActivityTitle(rawTitle), detail: rawTitle, status, createdAt: new Date().toISOString() };
+}
 
 function runMessages(run: RuntaRun, id: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
@@ -35,7 +64,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   }
 
   private mapAgent(value: RuntaAgent): Agent {
-    return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id };
+    return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: value.latest_reply?.updated_at ?? iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id, lastMessagePreview: value.latest_reply?.text };
   }
 
   async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderOption[]> {
@@ -46,7 +75,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
 
   async listAgents(_signal?: AbortSignal) {
     void _signal;
-    const response = await this.request<{ agents: RuntaAgent[] }>({ method: "GET", path: "/v1/agents?limit=250" });
+    const response = await this.request<{ agents: RuntaAgent[] }>({ method: "GET", path: "/v1/agents?limit=250&include_latest_reply=true" });
     return response.agents.map((agent) => this.mapAgent(agent));
   }
   async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}` })); }
@@ -79,16 +108,41 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const run = await this.request<RuntaRun>({ method: "POST", path: `/v1/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
     return { id: `${run.id}:user`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
   }
-  async reactToMessage(_input: ReactToMessageInput, _signal?: AbortSignal): Promise<Message> { void _input; void _signal; throw new CrewError("contract_pending", "Message reactions require the Cloud Agents reaction contract"); }
   subscribeToConversationEvents(id: string, listener: (event: ConversationEvent) => void): Subscription {
     const agentId = agentIdFromConversation(id);
     const observed = new Map<string, string>();
+    const streams = new Map<string, () => void>();
+    const bridge = window.runtaCrew?.cloud;
+    const subscribeToRun = (run: RuntaRun) => {
+      if (!bridge?.subscribe || streams.has(run.id) || terminalRunStatuses.has(run.status)) return;
+      let terminal = false;
+      const unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event: CloudStreamEvent) => {
+        if (event.event === "run.status" && event.data && typeof event.data === "object") {
+          const data = event.data as Partial<RuntaRun> & { session_id?: string | null };
+          if (typeof data.status !== "string") return;
+          const next: RuntaRun = { ...run, ...data, prompt: data.prompt ?? run.prompt, dsh_session_id: data.session_id ?? data.dsh_session_id ?? run.dsh_session_id };
+          terminal = terminalRunStatuses.has(next.status);
+          const message = runMessages(next, id).find((candidate) => candidate.id === `${run.id}:agent`);
+          if (message) listener({ type: "message.updated", message });
+          if (terminal) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          return;
+        }
+        if (event.event !== "acp.event" || terminal || !event.data || typeof event.data !== "object") return;
+        const payload = event.data as { params?: { update?: Record<string, unknown> & { sessionUpdate?: string; content?: { text?: string } } } };
+        const update = payload.params?.update;
+        if (update?.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string" && update.content.text) listener({ type: "message.delta", messageId: `${run.id}:agent`, delta: update.content.text });
+        const activity = update ? activityFromToolUpdate(update, id) : undefined;
+        if (activity) listener({ type: "activity.updated", activity });
+      });
+      streams.set(run.id, unsubscribe);
+    };
     const poll = async () => {
       try {
         const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
         for (const run of runs) {
           const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
           const previous = observed.get(run.id); observed.set(run.id, signature);
+          subscribeToRun(run);
           if (previous === undefined) {
             for (const message of runMessages(run, id)) listener({ type: "message.created", message });
           } else if (previous !== signature) {
@@ -101,7 +155,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       } catch { listener({ type: "connection.changed", state: "error" }); }
     };
     void poll(); const timer = window.setInterval(() => void poll(), 1000);
-    return { unsubscribe: () => window.clearInterval(timer) };
+    return { unsubscribe: () => { window.clearInterval(timer); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); } };
   }
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }

@@ -1,7 +1,6 @@
 export type AgentStatus = "working" | "idle" | "waiting_for_approval" | "offline";
 export type ConnectionState = "connected" | "connecting" | "disconnected" | "error";
 export type MessageRole = "user" | "agent" | "system";
-export type ReactionKind = "useful" | "needs_work";
 
 export interface Agent {
   id: string; name: string; role: string; goal: string; status: AgentStatus;
@@ -12,8 +11,7 @@ export interface ActivityPart { type: "activity"; activityId: string }
 export interface Attachment { id: string; name: string; size: number; mediaType: string; source: "local-selection" | "cloud" }
 export interface AttachmentPart { type: "attachment"; attachment: Attachment }
 export type MessagePart = TextPart | ActivityPart | AttachmentPart;
-export interface MessageReaction { kind: ReactionKind; count: number; selected: boolean }
-export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean; reactions?: MessageReaction[] }
+export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean }
 export interface Conversation { id: string; agentId: string; title: string; updatedAt: string }
 export type ActivityStatus = "running" | "completed" | "failed";
 export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; status: ActivityStatus; createdAt: string }
@@ -24,7 +22,6 @@ export interface CreateAgentInput { name: string; modelProviderId: string }
 export interface UpdateAgentInput { name?: string; role?: string; goal?: string; pinned?: boolean }
 export interface SendMessageInput { conversationId: string; text: string; attachments?: Attachment[]; signal?: AbortSignal }
 export interface RespondApprovalInput { requestId: string; decision: "allow" | "deny"; note?: string }
-export interface ReactToMessageInput { conversationId: string; messageId: string; reaction: ReactionKind }
 export type ConversationEvent =
   | { type: "message.created"; message: Message }
   | { type: "message.delta"; messageId: string; delta: string }

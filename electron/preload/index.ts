@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge } from "../../src/shared/desktop";
 
+let nextCloudSubscriptionId = 1;
+
 const bridge: DesktopBridge = {
   getVersion: () => ipcRenderer.invoke("desktop:version"),
   openExternal: (url) => ipcRenderer.invoke("desktop:openExternal", url),
@@ -17,7 +19,16 @@ const bridge: DesktopBridge = {
     status: () => ipcRenderer.invoke("auth:status"),
     logout: () => ipcRenderer.invoke("auth:logout"),
   },
-  cloud: { request: (request) => ipcRenderer.invoke("cloud:request", request) },
+  cloud: {
+    request: (request) => ipcRenderer.invoke("cloud:request", request),
+    subscribe: (path, listener) => {
+      const subscriptionId = String(nextCloudSubscriptionId++);
+      const handler = (_event: Electron.IpcRendererEvent, value: { subscriptionId: string; event: string; id?: string; data?: unknown }) => { if (value.subscriptionId === subscriptionId) listener(value); };
+      ipcRenderer.on("cloud:stream:event", handler);
+      ipcRenderer.send("cloud:stream:subscribe", { subscriptionId, path });
+      return () => { ipcRenderer.removeListener("cloud:stream:event", handler); ipcRenderer.send("cloud:stream:unsubscribe", subscriptionId); };
+    },
+  },
   attachments: { choose: () => ipcRenderer.invoke("attachments:choose") },
   notifications: {
     show: (notification) => ipcRenderer.invoke("notifications:show", notification),
