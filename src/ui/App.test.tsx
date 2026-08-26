@@ -31,7 +31,7 @@ describe("Runta Crew primary flows", () => {
     render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Open agent computer" }));
     expect(screen.getByText("Safe mock preview")).toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "Take over" }));
-    expect(document.querySelector(".detail-panel")).toHaveAttribute("data-computer-action", "takeover");
+    await waitFor(() => expect(document.querySelector(".detail-panel")).toHaveAttribute("data-computer-action", "takeover"));
     await waitFor(() => expect(document.querySelector(".computer-overlay")?.textContent).toContain("No remote desktop session is connected yet."));
   });
 
