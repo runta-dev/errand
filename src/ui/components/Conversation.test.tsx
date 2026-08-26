@@ -30,7 +30,7 @@ describe("Conversation states", () => {
     render(<Conversation agent={agent} messages={[]} activities={[]} loading onSend={async () => undefined} onToggleDetails={() => undefined} />);
     expect(screen.getByRole("status", { name: "Loading conversation history" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Atlas", level: 2 })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Message Atlas" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message Atlas" })).toBeInTheDocument();
   });
 
   it("shows the animated agent avatar before the first token arrives", () => {

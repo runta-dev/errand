@@ -74,4 +74,19 @@ describe("useCrewController", () => {
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString() } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(["run-1:user", "run-1:agent"]);
   });
+
+  it("treats a newly created agent as a known empty conversation", async () => {
+    let created = false;
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => [], listAgents: async () => created ? [agent("new-agent", "Atlas")] : [],
+      getAgent: async (id) => agent(id, id), createAgent: async (input) => { created = true; return agent("new-agent", input.name); }, updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => { await result.current.createAgent({ name: "Atlas", modelProviderId: "provider" }); });
+    expect(result.current.selectedAgentId).toBe("new-agent");
+    expect(result.current.conversationLoading).toBe(false);
+    expect(result.current.messages).toEqual([]);
+  });
 });
