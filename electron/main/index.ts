@@ -8,7 +8,7 @@ const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_S
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-const defaultSettings: AppSettings = { endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
+const defaultSettings: AppSettings = { endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();

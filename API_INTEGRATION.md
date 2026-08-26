@@ -1,45 +1,36 @@
-# Runta Cloud Agents API integration
+# Runta Cloud Agents API
 
-Runta Crew does not assume unconfirmed backend paths. `HttpCloudAgentsClient` accepts a `CloudAgentsRoutes` mapping and implements endpoint resolution, bearer authentication injection, typed failures, and `AbortSignal` cancellation.
+Runta Crew targets the `codex/cloud-agents-v1` implementation in the Runta monorepo. The concrete adapter is `RuntaCloudAgentsClient`; authenticated calls are brokered by the Electron main process so bearer credentials never enter renderer memory.
 
-## Required operations
+## Confirmed endpoints
 
-The backend contract must support:
-
-| Client operation | Required behavior |
+| Capability | Endpoint |
 | --- | --- |
-| `listAgents`, `getAgent`, `createAgent` | Named agents, role/goal, status, timestamps, unread/approval counters, computer association |
-| `updateAgent`, `deleteAgent`, `duplicateAgent`, `setAgentUnread` | Optimistic concurrency/version, deletion cleanup, duplication semantics and per-user preferences |
-| `listConversations`, `getConversation` | Stable conversation identity and ordered message history |
-| `sendMessage` | Idempotency key, accepted message, and subsequent stream identity |
-| `reactToMessage` | Supported reaction vocabulary, toggle/idempotency behavior and multi-device counts |
-| `subscribeToConversationEvents` | Resume cursor, ordering, heartbeat, message deltas/completion, activity, approvals, connection events |
-| `listApprovalRequests`, `respondToApproval` | Explicit action scope, decision, optional note, actor, audit timestamp, single-use semantics |
-| `getComputer` | Runtime state, active app/tool, preview availability, supported actions |
-| `openComputer`, `takeOverComputer` | Short-lived secure session descriptor, origin/audience, expiry, audit trail |
-| `reconnect` | Authentication/session validation and event resume behavior |
+| Device authorization | `POST /v1/auth/device/authorization` |
+| Device token exchange | `POST /v1/auth/device/token` |
+| Session verification | `GET /v1/auth/context` |
+| Token revocation | `DELETE /v1/auth/token` |
+| Agents | `GET/POST /v1/agents`, `GET/DELETE /v1/agents/{agent_id}` |
+| Model providers | `GET /v1/model-providers`, `PATCH /v1/model-providers/{provider_id}` |
+| Runs | `GET/POST /v1/agents/{agent_id}/runs`, run get/cancel/resume/follow-up routes |
+| Events | Agent event listing plus run SSE at `/v1/agents/{agent_id}/runs/{run_id}/events` |
+| Artifacts | Agent artifact list/create/get/delete routes |
+| Workspace | Agent workspace operations and file write/delete routes |
 
-## Decisions still required
+The device client id is `runta_crew`. Request and response fields follow the Cloud Agents OpenAPI snake_case schema.
 
-1. Canonical REST or ConnectRPC paths and response envelopes.
-2. Account/organization identity and token issuance/refresh flow.
-3. Whether authenticated requests are brokered through the Electron main process (recommended) or use a cookie-bound web origin.
-4. SSE vs WebSocket vs Connect streaming framing, cursor format, replay window, and backpressure.
-5. Message idempotency, retry, cancellation, and offline queue semantics.
-6. Agent status state machine and terminal/offline reason codes.
-7. Approval scope schema, expiry, revocation, and audit retention.
-8. Mapping from Agent to Runtime/Cloud Computer: dedicated vs shared environments.
-9. Computer session transport: Runta ingress, WebRTC, VNC, or browser stream; takeover arbitration and idle timeout.
-10. Attachments, files, tool output truncation, and signed download URLs.
-11. API error envelope, retry-after behavior, rate limits, and compatibility/version negotiation.
-12. Desktop notification payloads and background delivery when the app is closed.
+## Desktop mappings still incomplete
 
-## Proposed event shapes
+- Agent role, goal, pin, unread state, rename, and duplicate do not yet have canonical server mutations.
+- The renderer currently polls runs; it must move to the confirmed per-run SSE stream with cursor replay.
+- Run output must be translated into structured user/agent messages and activity events without losing run/session identity.
+- Approval list/decision routes and durable audit semantics are not present in this branch.
+- Computer preview/open/takeover session descriptors are not present; the desktop UI must not simulate them.
+- Local attachment IDs need artifact upload/finalization wiring before they can be sent with a run.
+- Reactions and multi-device counters need server persistence.
 
-The domain currently understands `message.created`, `message.delta`, `message.completed`, `activity.updated`, `approval.updated`, and `connection.changed`. These are client-side names, not claims about existing backend events. The adapter should translate the confirmed server protocol into these stable domain events.
+Unsupported operations fail with `CrewError("contract_pending", ...)`. There is no local product fallback.
 
-## Credential handling
+## End-to-end environment
 
-Tokens entered in Settings are encrypted using Electron `safeStorage` and written with user-only file permissions. The preload exposes `has` and `set`, not credential reads. Production API requests should be made by a main-process broker that decrypts only for the outbound request.
-
-Local file selection currently returns only an opaque ID and safe metadata to the renderer. The main process retains the path in memory. `HttpCloudAgentsClient` deliberately rejects these local selections until the backend defines upload creation/finalization, size limits, checksums, and how an opaque desktop selection becomes a cloud attachment ID.
+The Runta development stack must run the `cloud-agents-v1` worktree so `app.forge/api` serves the endpoints above. A 401 from `POST /v1/auth/device/authorization` means an older Runta API is active, because the Cloud Agents OpenAPI marks that route unauthenticated.

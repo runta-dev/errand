@@ -20,7 +20,7 @@ export function DeleteAgentDialog({ agent, onClose, onDelete }: { agent: Agent; 
   return <DialogShell title={`Delete ${agent.name}?`} onClose={onClose}><div className="delete-agent-copy"><p>This permanently removes the cloud agent and its runtime data.</p><strong>This action cannot be undone.</strong></div><div className="dialog-actions delete-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button destructive-button" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete agent"}</button></div></DialogShell>;
 }
 export function SettingsDialog({ mode = "preferences", onClose }: { mode?: "connection" | "preferences"; onClose(): void }) {
-  const [settings, setSettings] = useState<AppSettings>({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true });
+  const [settings, setSettings] = useState<AppSettings>({ endpoint: "https://app.forge/api", dashboardUrl: "https://app.forge", theme: "light", notifications: true });
   useEffect(() => { void window.runtaCrew?.settings.get().then(setSettings); }, []);
   async function save(event: FormEvent) {
     event.preventDefault(); await window.runtaCrew?.settings.set(settings);

@@ -16,6 +16,12 @@ export function App() {
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
   const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [createOpen, setCreateOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
+  function readableAuthError(reason: unknown) {
+    const raw = reason instanceof Error ? reason.message : "";
+    if (/Device authorization failed \(401\)/.test(raw)) return "This Runta environment does not support Crew sign-in yet.";
+    if (/Device authorization failed \(502|fetch failed/i.test(raw)) return "Runta Cloud Agents is unavailable. Try again shortly.";
+    return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/, "") || "Authorization failed. Try again.";
+  }
   async function connectAuthenticatedAccount() {
     const response = await window.runtaCrew?.cloud?.request({ method: "GET", path: "/v1/me" }).catch(() => undefined);
     if (!response) { setSignedIn(false); setUserName(""); setAuthError("Runta session validation did not return a response."); return false; }
@@ -41,10 +47,7 @@ export function App() {
         }
         throw new Error(status === "denied" ? "Authorization was denied." : status === "expired" ? "Authorization expired. Try again." : "Authorization failed. Try again.");
       }
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "";
-      setAuthError(message.includes("fetch failed") ? "Could not reach Runta. Check your network and try again." : message || "Authorization failed. Try again.");
-    }
+    } catch (reason) { setAuthError(readableAuthError(reason)); }
     finally { setAuthPending(false); }
   }
   async function logout() {

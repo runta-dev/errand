@@ -25,7 +25,7 @@ npm run dev
 
 Development defaults:
 
-- Cloud API: `https://api.forge`
+- Cloud API: `https://app.forge/api`
 - Dashboard: `https://app.forge`
 
 Connection overrides are available only in development builds.
