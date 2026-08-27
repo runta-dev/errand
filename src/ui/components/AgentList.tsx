@@ -1,7 +1,9 @@
 import { LogIn, LogOut, MessageCircle, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { Agent } from "@/domain/types";
 import { AgentAvatar } from "./AgentAvatar";
+
+const Streamdown = lazy(async () => ({ default: (await import("streamdown")).Streamdown }));
 
 export type AgentAction = "edit" | "delete";
 export function AgentList({ agents, selectedId, search, creatingAgentName, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgentName?: string; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
@@ -35,7 +37,7 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, signe
       {agents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
           <AgentAvatar agent={agent} />
-          <span className="agent-copy"><strong><span>{agent.name}</span></strong>{agent.lastMessagePreview && <span className="agent-preview">{agent.lastMessagePreview}</span>}</span>
+          <span className="agent-copy"><strong><span>{agent.name}</span></strong>{agent.lastMessagePreview && <span className="agent-preview"><Suspense fallback={agent.lastMessagePreview}><Streamdown className="agent-preview-markdown" mode="static" controls={false} linkSafety={{ enabled: true }} skipHtml>{agent.lastMessagePreview}</Streamdown></Suspense></span>}</span>
         </button>
         <button className="agent-more" aria-label={`More actions for ${agent.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => setMenuAgentId((current) => current === agent.id ? undefined : agent.id)}><MoreHorizontal size={15} /></button>
         {menuAgentId === agent.id && <div className="agent-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>

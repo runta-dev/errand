@@ -79,17 +79,19 @@ describe("useCrewController", () => {
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }] });
     expect(result.current.messages[1]).toMatchObject({ role: "agent", streaming: true });
+    const visualIds = result.current.messages.map((message) => message.id);
     await act(async () => { await result.current.sendMessage("hello"); });
     expect(sendMessage).toHaveBeenCalledTimes(1);
 
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
     expect(result.current.messages).toHaveLength(2);
-    expect(result.current.messages[0]?.id).toBe("run-1:user");
+    expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
 
     await act(async () => { resolveSend({ id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
-    expect(result.current.messages[0]?.id).toBe("run-1:user");
+    expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString() } }));
-    expect(result.current.messages.map((message) => message.id)).toEqual(["run-1:user", "run-1:agent"]);
+    expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
+    expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "Hi" }]);
   });
 
   it("treats a newly created agent as a known empty conversation", async () => {

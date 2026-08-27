@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Agent, Message } from "@/domain/types";
 import { Conversation, MessageView } from "./Conversation";
 
@@ -54,5 +54,22 @@ describe("Conversation states", () => {
     render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
     expect(screen.getByRole("status", { name: "Agent is working: Reading file" })).toBeInTheDocument();
     expect(screen.getByText("Reading file")).toHaveClass("agent-working-progress");
+  });
+
+  it("animates a user entry and the final agent response at their actual state transitions", () => {
+    const animate = vi.fn(); const originalAnimate = HTMLElement.prototype.animate;
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });
+    try {
+      const user: Message = { id: "optimistic-user:1", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "Hello" }], createdAt: new Date().toISOString() };
+      render(<MessageView message={user} activities={[]} entering />);
+      expect(animate).toHaveBeenCalledTimes(1);
+
+      const streaming: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
+      const { rerender } = render(<MessageView message={streaming} activities={[]} />);
+      rerender(<MessageView message={{ ...streaming, parts: [{ type: "text", text: "Done" }], streaming: false }} activities={[]} />);
+      expect(animate).toHaveBeenCalledTimes(2);
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: originalAnimate });
+    }
   });
 });
