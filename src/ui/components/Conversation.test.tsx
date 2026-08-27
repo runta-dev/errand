@@ -13,6 +13,20 @@ describe("Conversation states", () => {
     expect(container.querySelector(".agent-markdown")).not.toHaveTextContent("**");
   });
 
+  it("lets long Markdown tables expand without overlapping following content", async () => {
+    const message: Message = { id: "agent-table", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "| Date | News |\n| --- | --- |\n| Aug 13, 2026 | A very long update that must wrap inside the table cell instead of escaping the table layout. |\n| Aug 5, 2026 | Another long update. |\n\nSources: [Runta Blog](https://runta.com/blog)\n\nWant me to dig deeper?" }], createdAt: new Date().toISOString() };
+    const { container } = render(<MessageView message={message} activities={[]} />);
+    const table = await screen.findByRole("table");
+    const wrapper = table.closest('[data-streamdown="table-wrapper"]');
+
+    expect(wrapper).toBeInTheDocument();
+    expect(wrapper).not.toContainElement(screen.getByText(/Sources:/).closest("p"));
+    const tableViewport = container.querySelector<HTMLElement>('[data-streamdown="table-wrapper"] > div:last-child');
+    expect(tableViewport).toBeInTheDocument();
+    expect(tableViewport).not.toHaveAttribute("style");
+    expect(screen.getByText("Want me to dig deeper?")).toBeInTheDocument();
+  });
+
   it("renders normal links and opens them in the system browser", async () => {
     const openExternal = vi.fn(async () => undefined);
     window.runtaCrew = { openExternal } as unknown as typeof window.runtaCrew;
