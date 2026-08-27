@@ -72,7 +72,3 @@ Artifacts are written to `release/`. Local builds are ad-hoc signed; public dist
 ## Under the hood
 
 Runta Crew keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.
-
-## Independent implementation
-
-Grok Bot 0.18 Reconstructed was studied for product shape and Electron boundaries. Runta Crew is an independent implementation and does not copy its source, binaries, assets, private interfaces, account system, telemetry, updater, or trademarks.
