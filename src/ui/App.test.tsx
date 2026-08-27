@@ -57,6 +57,20 @@ describe("Runta Crew authentication surfaces", () => {
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
   });
 
+  it("does not duplicate a creating row when polling sees the new server agent first", () => {
+    const existing = { id: "existing", name: "Scout", role: "Cloud coding agent", goal: "Scout", status: "idle" as const, avatar: "S", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "existing" };
+    const created = { ...existing, id: "created", status: "working" as const, computerId: "created" };
+    const props = { selectedId: "", search: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
+    const { rerender } = render(<AgentList {...props} agents={[existing, created]} creatingAgentName="Scout" creatingAgentBaselineIds={new Set([existing.id])} />);
+
+    expect(screen.getAllByText("Scout")).toHaveLength(2);
+    expect(screen.getByText("Creating…")).toBeInTheDocument();
+
+    rerender(<AgentList {...props} agents={[existing, created]} />);
+    expect(screen.getAllByText("Scout")).toHaveLength(2);
+    expect(screen.queryByText("Creating…")).not.toBeInTheDocument();
+  });
+
   it("distinguishes an empty crew from an empty search result", () => {
     const props = { agents: [], selectedId: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
     const { rerender } = render(<AgentList {...props} search="" />);

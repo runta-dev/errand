@@ -6,7 +6,7 @@ import { AgentAvatar } from "./AgentAvatar";
 const Streamdown = lazy(async () => ({ default: (await import("streamdown")).Streamdown }));
 
 export type AgentAction = "edit" | "delete";
-export function AgentList({ agents, selectedId, search, creatingAgentName, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgentName?: string; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
+export function AgentList({ agents, selectedId, search, creatingAgentName, creatingAgentBaselineIds, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgentName?: string; creatingAgentBaselineIds?: ReadonlySet<string>; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
   const [menuAgentId, setMenuAgentId] = useState<string>(); const [accountOpen, setAccountOpen] = useState(false);
   useEffect(() => { if (!menuAgentId) return; const close = () => setMenuAgentId(undefined); window.addEventListener("pointerdown", close); return () => window.removeEventListener("pointerdown", close); }, [menuAgentId]);
   useEffect(() => {
@@ -21,6 +21,9 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, signe
     };
   }, [accountOpen]);
   const act = (agent: Agent, action: AgentAction) => { setMenuAgentId(undefined); onAction(agent, action); };
+  const visibleAgents = creatingAgentName
+    ? agents.filter((agent) => agent.name !== creatingAgentName || creatingAgentBaselineIds?.has(agent.id))
+    : agents;
   return <aside className="agent-sidebar">
     <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" disabled={Boolean(creatingAgentName)} onClick={onCreate}><Plus size={18} /></button></div>
     <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your crew" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
@@ -31,10 +34,10 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, signe
           <span className="agent-copy"><strong><span>{creatingAgentName}</span></strong><span className="agent-preview">Creating…</span></span>
         </div>
       </div>}
-      {!creatingAgentName && agents.length === 0 && <div className="agent-list-empty">
+      {!creatingAgentName && visibleAgents.length === 0 && <div className="agent-list-empty">
         {search.trim() ? "No agents found" : "No agents yet"}
       </div>}
-      {agents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
+      {visibleAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
           <AgentAvatar agent={agent} />
           <span className="agent-copy"><strong><span>{agent.name}</span></strong>{agent.lastMessagePreview && <span className="agent-preview"><Suspense fallback={agent.lastMessagePreview}><Streamdown className="agent-preview-markdown" mode="static" controls={false} linkSafety={{ enabled: true }} skipHtml>{agent.lastMessagePreview}</Streamdown></Suspense></span>}</span>
