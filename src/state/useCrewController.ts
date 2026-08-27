@@ -7,12 +7,17 @@ function agentMessagePreview(message?: Message): string {
   return message.parts.filter((part) => part.type === "text").map((part) => part.text).join("").trim();
 }
 
+function latestCompletedAgentPreview(messages: Message[]): string {
+  return agentMessagePreview([...messages].reverse().find((message) => message.role === "agent" && !message.streaming));
+}
+
 function messageText(message: Message): string {
   return message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
 }
 
 interface AgentSnapshot { messages: Message[]; approvals: ApprovalRequest[]; computer?: CloudComputer; cachedAt: number }
 const SNAPSHOT_TTL_MS = 60_000;
+const AGENT_FALLBACK_REFRESH_MS = 30_000;
 const isTransientGatewayError = (message?: string) => /^Cloud Agents request failed \((?:502|503|504)\)$/.test(message ?? "");
 const OPTIMISTIC_USER_PREFIX = "optimistic-user:";
 const OPTIMISTIC_AGENT_PREFIX = "optimistic-agent:";
@@ -37,10 +42,16 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     const next = fetched.filter((agent) => !deletingAgentIds.current.has(agent.id));
     const selectedId = selectedAgentIdRef.current; const selected = next.find((agent) => agent.id === selectedId); const snapshot = snapshots.current.get(selectedId);
     if (selected?.lastMessagePreview && snapshot && !snapshot.messages.some((message) => message.streaming)) {
-      const cachedPreview = agentMessagePreview([...snapshot.messages].reverse().find((message) => message.role === "agent"));
+      const cachedPreview = latestCompletedAgentPreview(snapshot.messages);
       if (cachedPreview !== selected.lastMessagePreview) { snapshots.current.set(selectedId, { ...snapshot, cachedAt: 0 }); setRevalidateVersion((value) => value + 1); }
     }
-    setAgents((current) => next.map((agent) => ({ ...agent, lastMessagePreview: agent.lastMessagePreview ?? current.find((item) => item.id === agent.id)?.lastMessagePreview })));
+    const selectedIsStreaming = Boolean(snapshot?.messages.some((message) => message.streaming));
+    setAgents((current) => next.map((agent) => {
+      const existing = current.find((item) => item.id === agent.id);
+      const localPreview = latestCompletedAgentPreview(snapshots.current.get(agent.id)?.messages ?? []);
+      const preserveLocalPreview = Boolean(localPreview) || (agent.id === selectedId && selectedIsStreaming);
+      return { ...agent, lastMessagePreview: preserveLocalPreview ? localPreview || existing?.lastMessagePreview : agent.lastMessagePreview ?? existing?.lastMessagePreview };
+    }));
     setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next;
   }, [client]);
   useEffect(() => {
@@ -49,7 +60,17 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, providers]) => { if (alive) { setModelProviders(providers); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } });
     return () => { alive = false; };
   }, [client, enabled, refreshAgents]);
-  useEffect(() => { if (!enabled) return; const timer = window.setInterval(() => { void refreshAgents().then(() => setError((current) => isTransientGatewayError(current) ? undefined : current)).catch(() => undefined); }, 5_000); return () => window.clearInterval(timer); }, [enabled, refreshAgents]);
+  useEffect(() => {
+    if (!enabled) return;
+    const refreshWhenActive = () => {
+      if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      void refreshAgents().then(() => setError((current) => isTransientGatewayError(current) ? undefined : current)).catch(() => undefined);
+    };
+    const onVisibilityChange = () => { if (document.visibilityState === "visible") refreshWhenActive(); };
+    const timer = window.setInterval(refreshWhenActive, AGENT_FALLBACK_REFRESH_MS);
+    window.addEventListener("focus", refreshWhenActive); window.addEventListener("online", refreshWhenActive); document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refreshWhenActive); window.removeEventListener("online", refreshWhenActive); document.removeEventListener("visibilitychange", onVisibilityChange); };
+  }, [enabled, refreshAgents]);
   useEffect(() => {
     if (!enabled) return;
     const cached = snapshots.current.get(selectedAgentId);
@@ -69,12 +90,12 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       const conversation = conversations[0]; const data = conversation ? await client.getConversation(conversation.id, controller.signal) : undefined;
       if (alive && !deletingAgentIds.current.has(selectedAgentId)) {
         const nextMessages = (data?.messages ?? []).map((message) => { const visualId = visualMessageIds.current.get(message.id); return visualId ? { ...message, id: visualId } : message; });
-        const preview = agentMessagePreview([...nextMessages].reverse().find((message) => message.role === "agent"));
+        const preview = latestCompletedAgentPreview(nextMessages);
         snapshots.current.set(selectedAgentId, { messages: nextMessages, approvals: nextApprovals, computer: nextComputer, cachedAt: Date.now() });
         setLoadedAgentIds((current) => new Set(current).add(selectedAgentId));
         setMessages(nextMessages); setApprovals(nextApprovals); setComputer(nextComputer);
         setLiveAgentId(selectedAgentId);
-        setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: preview || undefined } : agent));
+        if (preview) setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: preview } : agent));
       }
     }).catch((reason: unknown) => { if (alive && !deletingAgentIds.current.has(selectedAgentId) && !(reason instanceof DOMException && reason.name === "AbortError")) { snapshots.current.set(selectedAgentId, { messages: [], approvals: [], cachedAt: Date.now() }); setLoadedAgentIds((current) => new Set(current).add(selectedAgentId)); setMessages([]); setError(reason instanceof Error ? reason.message : "Could not load agent"); } });
     return () => { alive = false; controller.abort(); };
@@ -103,7 +124,6 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
           }
           return current.some((message) => message.id === nextMessage.id) ? current.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...current, nextMessage];
         });
-        if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
       }
       if (event.type === "message.delta") {
         updateMessages((current) => {
@@ -113,21 +133,22 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
           if (!current.some((message) => message.id === visualId)) return [...current, { id: visualId, conversationId, role: "agent", parts: [{ type: "text", text: event.delta }], createdAt: new Date().toISOString(), streaming: true }];
           return current.map((message) => message.id === visualId ? { ...message, parts: message.parts.map((part, index) => index === 0 && part.type === "text" ? { ...part, text: part.text + event.delta } : part) } : message);
         });
-        setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: `${agent.lastMessagePreview ?? ""}${event.delta}` } : agent));
       }
       if (event.type === "message.completed") {
         const visualId = visualMessageIds.current.get(event.messageId) ?? event.messageId;
         if (event.notify === false) {
           updateMessages((current) => current.filter((message) => message.id !== visualId));
-          setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: undefined } : agent));
         } else {
           updateMessages((current) => current.map((message) => message.id === visualId ? { ...message, streaming: false } : message));
+          const completedMessages = (snapshots.current.get(selectedAgentId)?.messages ?? []).map((message) => message.id === visualId ? { ...message, streaming: false } : message);
+          const completedPreview = latestCompletedAgentPreview(completedMessages);
+          if (completedPreview) setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: completedPreview } : agent));
           void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." });
         }
       }
       if (event.type === "message.updated") {
         updateMessages((current) => { let visualId = visualMessageIds.current.get(event.message.id); if (!visualId && event.message.role === "agent") { const claimedVisualIds = new Set(visualMessageIds.current.values()); const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id)); if (optimistic) { visualId = optimistic.id; visualMessageIds.current.set(event.message.id, visualId); } } const nextMessage = visualId ? { ...event.message, id: visualId } : event.message; return current.some((message) => message.id === nextMessage.id) ? current.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...current, nextMessage]; });
-        if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
+        if (event.message.role === "agent" && !event.message.streaming) setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
       }
       if (event.type === "approval.updated") { setApprovals((current) => { const next = current.map((approval) => approval.id === event.approval.id ? event.approval : approval); const snapshot = snapshots.current.get(selectedAgentId); snapshots.current.set(selectedAgentId, { messages: snapshot?.messages ?? [], approvals: next, computer: snapshot?.computer, cachedAt: Date.now() }); return next; }); if (event.approval.status === "pending") void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} needs approval`, body: event.approval.title }); }
       if (event.type === "activity.updated") setActivities((current) => current.some((activity) => activity.id === event.activity.id) ? current.map((activity) => activity.id === event.activity.id ? event.activity : activity) : [...current, event.activity]);

@@ -6,7 +6,7 @@
 - Keep Runta Cloud Agents routes and event framing aligned with the `runta` Cloud Agents implementation and its end-to-end tests.
 - Do not add product-side mock data or simulated computer surfaces. Tests may use bounded transport doubles, but the application must surface unavailable backend capabilities honestly.
 - Default to the light theme and preserve both theme token sets.
-- Read and follow `DESIGN_SYSTEM.md` for every UI change. Apply its visible-element admission rule and border checklist before adding permanent controls or decoration.
+- Keep every UI change minimal: add only necessary controls or decoration, and justify every visible border.
 - Use strict TypeScript; do not add `any` escapes.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and packaging/smoke checks for release-facing changes.
 - Use Conventional Commits. Runta Crew is currently in rapid iteration: commit and push directly to the active remote branch. A pull request is not required unless the user explicitly asks for one. Keep branch history linear and never introduce merge commits.

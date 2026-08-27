@@ -11,6 +11,7 @@ const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ?
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 const status = (value: string): Agent["status"] => value === "running" ? "idle" : value === "pending" ? "working" : "offline";
 const terminalRunStatuses = new Set(["finished", "failed", "cancelled"]);
+const RUN_FALLBACK_REFRESH_MS = 30_000;
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function toolActivityKind(value: string): ActivityEvent["kind"] {
@@ -73,6 +74,7 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper
 }
 
 export class RuntaCloudAgentsClient implements CloudAgentsClient {
+  private readonly conversationRefreshListeners = new Map<string, Set<() => void>>();
   private async request<T>(request: CloudRequest): Promise<T> {
     const bridge = window.runtaCrew?.cloud;
     if (!bridge) throw new CrewError("network", "Runta desktop cloud bridge is unavailable", true);
@@ -186,6 +188,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     if (input.attachments?.length) throw new CrewError("contract_pending", "Cloud attachment upload is not available yet");
     const agentId = agentIdFromConversation(input.conversationId);
     const run = await this.request<RuntaRun>({ method: "POST", path: `/v1/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
+    for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();
     return { id: `${run.id}:user`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
   }
   subscribeToConversationEvents(id: string, listener: (event: ConversationEvent) => void): Subscription {
@@ -241,10 +244,13 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       });
       streams.set(run.id, unsubscribe);
     };
+    let polling = false; let pollAgain = false;
     const poll = async () => {
+      if (polling) { pollAgain = true; return; }
+      polling = true;
       try {
         const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
-        for (const run of runs) {
+        for (const run of runs.slice().reverse()) {
           const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
           const previous = observed.get(run.id); observed.set(run.id, signature);
           subscribeToRun(run);
@@ -258,9 +264,14 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         }
         listener({ type: "connection.changed", state: "connected" });
       } catch { listener({ type: "connection.changed", state: "error" }); }
+      finally { polling = false; if (pollAgain) { pollAgain = false; void poll(); } }
     };
-    void poll(); const timer = window.setInterval(() => void poll(), 1000);
-    return { unsubscribe: () => { window.clearInterval(timer); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); assistantStreams.clear(); } };
+    const refreshWhenActive = () => { if (document.visibilityState !== "hidden" && navigator.onLine) void poll(); };
+    const onVisibilityChange = () => { if (document.visibilityState === "visible") refreshWhenActive(); };
+    const refreshListeners = this.conversationRefreshListeners.get(id) ?? new Set<() => void>(); refreshListeners.add(refreshWhenActive); this.conversationRefreshListeners.set(id, refreshListeners);
+    void poll(); const timer = window.setInterval(refreshWhenActive, RUN_FALLBACK_REFRESH_MS);
+    window.addEventListener("focus", refreshWhenActive); window.addEventListener("online", refreshWhenActive); document.addEventListener("visibilitychange", onVisibilityChange);
+    return { unsubscribe: () => { window.clearInterval(timer); window.removeEventListener("focus", refreshWhenActive); window.removeEventListener("online", refreshWhenActive); document.removeEventListener("visibilitychange", onVisibilityChange); refreshListeners.delete(refreshWhenActive); if (refreshListeners.size === 0) this.conversationRefreshListeners.delete(id); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); assistantStreams.clear(); } };
   }
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }

@@ -66,7 +66,7 @@ describe("useCrewController", () => {
     const sendMessage = vi.fn(async () => pendingSend);
     const listeners = new Map<string, (event: ConversationEvent) => void>();
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas")],
+      listModelProviders: async () => [], listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: "Old server reply" }],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation: async (id) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date(0).toISOString() }, messages: [] }),
       sendMessage, subscribeToConversationEvents: (id, listener) => { listeners.set(id, listener); return { unsubscribe: () => undefined }; }, listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
@@ -89,15 +89,19 @@ describe("useCrewController", () => {
 
     await act(async () => { resolveSend({ id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
-    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString() } }));
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "Hi" }]);
+    await act(async () => { await result.current.reconnect(); });
+    expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
     act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent", notify: false }));
     expect(result.current.messages).toHaveLength(1);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.delta", messageId: "run-1:agent", delta: "Final answer after the tool" }));
     expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Final answer after the tool" }], streaming: true });
+    expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
     act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent", notify: true }));
     expect(result.current.messages[1]).toMatchObject({ streaming: false });
+    expect(result.current.agents[0]?.lastMessagePreview).toBe("Final answer after the tool");
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent:second", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Final answer" }], createdAt: new Date(1).toISOString(), streaming: true } }));
     expect(result.current.messages).toHaveLength(3);
     expect(result.current.messages[2]).toMatchObject({ id: "run-1:agent:second", parts: [{ type: "text", text: "Final answer" }], streaming: true });

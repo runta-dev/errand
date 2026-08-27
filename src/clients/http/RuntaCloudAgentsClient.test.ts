@@ -66,6 +66,35 @@ describe("RuntaCloudAgentsClient", () => {
     subscription.unsubscribe();
   });
 
+  it("discovers a locally created run immediately instead of waiting for fallback polling", async () => {
+    let created = false;
+    const subscribe = vi.fn(() => () => undefined);
+    const request = vi.fn(async ({ method }: CloudRequest) => method === "POST"
+      ? (created = true, { status: 201, body: { id: "run-new", agent_id: "agent-1", status: "pending", prompt: "Start", result: null, error: null } })
+      : { status: 200, body: created ? [{ id: "run-new", agent_id: "agent-1", status: "pending", prompt: "Start", result: null, error: null }] : [] });
+    window.runtaCrew = { cloud: { request, subscribe }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+    const client = new RuntaCloudAgentsClient();
+    const subscription = client.subscribeToConversationEvents("conversation-agent-1", () => undefined);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await client.sendMessage({ conversationId: "conversation-agent-1", text: "Start" });
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledWith("/v1/agents/agent-1/runs/run-new/events?after=-1", expect.any(Function)));
+    subscription.unsubscribe();
+  });
+
+  it("replays run summaries from oldest to newest so the sidebar preview stays current", async () => {
+    const request = vi.fn(async () => ({ status: 200, body: [
+      { id: "run-new", agent_id: "agent-1", status: "finished", prompt: "New prompt", result: "Newest reply", error: null, created_at: "2026-08-26T02:00:00Z", updated_at: "2026-08-26T02:00:01Z" },
+      { id: "run-old", agent_id: "agent-1", status: "finished", prompt: "Old prompt", result: "Old reply", error: null, created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z" },
+    ] }));
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+    const replies: string[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => {
+      if (event.type === "message.created" && event.message.role === "agent") replies.push(event.message.parts[0]?.type === "text" ? event.message.parts[0].text : "");
+    });
+    await vi.waitFor(() => expect(replies).toEqual(["Old reply", "Newest reply"]));
+    subscription.unsubscribe();
+  });
+
   it("replays historical assistant messages by ACP message id instead of the aggregated run result", async () => {
     const request = vi.fn(async () => ({ status: 200, body: [{
       id: "run-history", agent_id: "agent-1", status: "finished", prompt: "Research it",

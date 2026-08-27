@@ -67,6 +67,39 @@ describe("Conversation states", () => {
     expect(container.querySelector(".message-content")?.parentElement).toHaveClass("message-scroll");
   });
 
+  it("stops following when the user scrolls up and offers a return to latest", () => {
+    const first: Message = { id: "agent-1", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "First response" }], createdAt: new Date().toISOString() };
+    const second: Message = { ...first, id: "agent-2", parts: [{ type: "text", text: "New response" }] };
+    const { container, rerender } = render(<Conversation agent={agent} messages={[first]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    const scroller = container.querySelector<HTMLElement>(".message-scroll");
+    expect(scroller).toBeInTheDocument();
+    Object.defineProperties(scroller!, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 600 } });
+    const scrollTo = vi.fn(); Object.defineProperty(scroller!, "scrollTo", { configurable: true, value: scrollTo });
+
+    fireEvent.wheel(scroller!, { deltaY: -120 });
+    scroller!.scrollTop = 240; fireEvent.scroll(scroller!);
+    const returnButton = screen.getByRole("button", { name: "Scroll to latest message" });
+    expect(returnButton).toBeInTheDocument();
+
+    scrollTo.mockClear();
+    rerender(<Conversation agent={agent} messages={[first, second]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    fireEvent.click(returnButton);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
+    expect(screen.queryByRole("button", { name: "Scroll to latest message" })).not.toBeInTheDocument();
+  });
+
+  it("detects upward scrollbar dragging while an automatic scroll is in progress", () => {
+    const message: Message = { id: "agent-streaming", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Streaming" }], createdAt: new Date().toISOString(), streaming: true };
+    const { container } = render(<Conversation agent={agent} messages={[message]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    const scroller = container.querySelector<HTMLElement>(".message-scroll")!;
+    Object.defineProperties(scroller, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 600 } });
+    fireEvent.scroll(scroller);
+    scroller.scrollTop = 220; fireEvent.scroll(scroller);
+    expect(screen.getByRole("button", { name: "Scroll to latest message" })).toBeInTheDocument();
+  });
+
   it("focuses the composer when a new-agent focus request arrives", () => {
     const { rerender } = render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
     const composer = screen.getByRole("textbox", { name: "Message Atlas" });

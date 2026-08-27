@@ -1,7 +1,7 @@
 import { Check, ChevronsRight, Maximize2, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import type { ApprovalRequest, CloudComputer } from "@/domain/types";
-import screenPlaceholder from "@/assets/screen-placeholder.png";
+import screenPlaceholder from "@/assets/screen-placeholder.gif";
 
 export function DetailPanel({ open, agentName, computer, approvals, onApproval, onComputerAction, onClose }: { open: boolean; agentName: string; computer?: CloudComputer; approvals: ApprovalRequest[]; onApproval(id: string, decision: "allow" | "deny", note?: string): Promise<void>; onComputerAction(action: "open" | "takeover"): Promise<{ url: string; mode: "remote" }>; onClose(): void }) {
   const [note, setNote] = useState(""); const [computerBusy, setComputerBusy] = useState(false); const pending = approvals.filter((approval) => approval.status === "pending");
