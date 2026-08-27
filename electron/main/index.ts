@@ -230,7 +230,10 @@ ipcMain.on("cloud:stream:subscribe", (event, value: { subscriptionId?: unknown; 
         const blocks = buffer.split(/\r?\n\r?\n/); buffer = blocks.pop() ?? ""; for (const block of blocks) dispatch(block);
       }
     } catch (reason) { if (!controller.signal.aborted) send({ event: "error", data: reason instanceof Error ? reason.message : "Cloud event stream failed" }); }
-    finally { if (cloudStreams.get(key) === controller) cloudStreams.delete(key); }
+    finally {
+      if (!controller.signal.aborted) send({ event: "stream.closed" });
+      if (cloudStreams.get(key) === controller) cloudStreams.delete(key);
+    }
   })();
 });
 ipcMain.on("cloud:stream:unsubscribe", (event, subscriptionId: unknown) => { if (typeof subscriptionId !== "string") return; const key = `${event.sender.id}:${subscriptionId}`; cloudStreams.get(key)?.abort(); cloudStreams.delete(key); });

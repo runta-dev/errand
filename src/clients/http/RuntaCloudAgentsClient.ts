@@ -52,6 +52,26 @@ function runMessages(run: RuntaRun, id: string): Message[] {
   return [...user, { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result ?? "" }], createdAt: updatedAt, streaming: !terminalRunStatuses.has(run.status) }];
 }
 
+function assistantChunk(event: CloudStreamEvent): { sourceId: string; text: string } | undefined {
+  if (event.event !== "acp.event" || !event.data || typeof event.data !== "object") return undefined;
+  const payload = event.data as { params?: { update?: { sessionUpdate?: string; messageId?: string; content?: { text?: string } } } };
+  const update = payload.params?.update;
+  if (update?.sessionUpdate !== "agent_message_chunk" || typeof update.content?.text !== "string" || !update.content.text) return undefined;
+  return { sourceId: stringValue(update.messageId) ?? "legacy", text: update.content.text };
+}
+
+async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor++;
+      results[index] = await mapper(values[index]);
+    }
+  }));
+  return results;
+}
+
 export class RuntaCloudAgentsClient implements CloudAgentsClient {
   private async request<T>(request: CloudRequest): Promise<T> {
     const bridge = window.runtaCrew?.cloud;
@@ -105,11 +125,57 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const latest = runs[0];
     return [{ id: conversationId(agentId), agentId, title: "Agent conversation", updatedAt: latest?.updated_at ?? new Date().toISOString() }];
   }
+  private replayRunMessages(agentId: string, run: RuntaRun, id: string, signal?: AbortSignal): Promise<Message[]> {
+    const fallback = runMessages(run, id);
+    const bridge = window.runtaCrew?.cloud;
+    if (!bridge?.subscribe || !terminalRunStatuses.has(run.status) || signal?.aborted) return Promise.resolve(fallback);
+    return new Promise((resolve) => {
+      const messages = new Map<string, Message>();
+      let settled = false;
+      let unsubscribe: () => void = () => undefined;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        signal?.removeEventListener("abort", finish);
+        unsubscribe();
+        const replayed = [...messages.values()];
+        if (!replayed.length) { resolve(fallback); return; }
+        resolve([
+          ...fallback.filter((message) => message.role === "user"),
+          ...replayed,
+          ...fallback.filter((message) => message.role === "system"),
+        ]);
+      };
+      const timeout = window.setTimeout(finish, 10_000);
+      signal?.addEventListener("abort", finish, { once: true });
+      unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
+        if (event.event === "stream.closed" || event.event === "error") { finish(); return; }
+        const chunk = assistantChunk(event);
+        if (!chunk) return;
+        const messageId = `${run.id}:agent:${chunk.sourceId}`;
+        const current = messages.get(messageId);
+        if (current) {
+          const part = current.parts[0];
+          if (part?.type === "text") part.text += chunk.text;
+          return;
+        }
+        messages.set(messageId, {
+          id: messageId,
+          conversationId: id,
+          role: "agent",
+          parts: [{ type: "text", text: chunk.text }],
+          createdAt: run.updated_at ?? run.created_at ?? new Date().toISOString(),
+          streaming: false,
+        });
+      });
+    });
+  }
   async getConversation(id: string, _signal?: AbortSignal) {
-    void _signal;
     const agentId = agentIdFromConversation(id);
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
-    const messages = runs.slice().reverse().flatMap((run) => runMessages(run, id));
+    const messageGroups = await mapWithConcurrency(runs.slice().reverse(), 8, (run) => this.replayRunMessages(agentId, run, id, _signal));
+    const messages = messageGroups.flat();
     return { conversation: { id, agentId, title: "Agent conversation", updatedAt: runs[0]?.updated_at ?? new Date().toISOString() }, messages };
   }
   async sendMessage(input: SendMessageInput): Promise<Message> {
@@ -151,17 +217,18 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         if (event.event !== "acp.event" || terminal || !event.data || typeof event.data !== "object") return;
         const payload = event.data as { params?: { update?: Record<string, unknown> & { sessionUpdate?: string; messageId?: string; content?: { text?: string } } } };
         const update = payload.params?.update;
-        if (update?.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string" && update.content.text) {
-          const sourceId = stringValue(update.messageId) ?? "legacy";
+        const chunk = assistantChunk(event);
+        if (chunk) {
+          const sourceId = chunk.sourceId;
           const messageId = `${run.id}:agent:${sourceId}`;
           if (!assistant.seen.has(messageId)) {
             completeCurrentAssistant();
             assistant.current = messageId;
             assistant.seen.add(messageId);
-            listener({ type: "message.created", message: { id: messageId, conversationId: id, role: "agent", parts: [{ type: "text", text: update.content.text }], createdAt: new Date().toISOString(), streaming: true } });
+            listener({ type: "message.created", message: { id: messageId, conversationId: id, role: "agent", parts: [{ type: "text", text: chunk.text }], createdAt: new Date().toISOString(), streaming: true } });
           } else {
             assistant.current = messageId;
-            listener({ type: "message.delta", messageId, delta: update.content.text });
+            listener({ type: "message.delta", messageId, delta: chunk.text });
           }
         }
         if (update?.sessionUpdate === "tool_call") completeCurrentAssistant();

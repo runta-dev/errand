@@ -24,7 +24,8 @@ describe("RuntaCloudAgentsClient", () => {
       if (method === "PATCH" && path === "/v1/agents/agent-1") return { status: 200, body: { id: "agent-1", runtime_id: "agent-1", name: "Atlas", status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 4 } };
       return { status: 404 };
     });
-    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => { queueMicrotask(() => listener({ event: "stream.closed" })); return () => undefined; };
+    window.runtaCrew = { cloud: { request, subscribe }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
     const client = new RuntaCloudAgentsClient();
     expect((await client.listAgents())[0]).toEqual(expect.objectContaining({ id: "agent-1", name: "Builder", status: "idle", lastMessagePreview: "Latest agent reply", lastActiveAt: "2026-08-26T01:00:01Z" }));
     expect(await client.listModelProviders()).toEqual([{ id: "provider-1", name: "Kimi", protocol: "openai_responses", defaultModel: "k3" }]);
@@ -63,5 +64,34 @@ describe("RuntaCloudAgentsClient", () => {
     expect(events).not.toContainEqual(expect.objectContaining({ type: "message.updated", message: expect.objectContaining({ id: "run-1:agent" }) }));
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-2", notify: true });
     subscription.unsubscribe();
+  });
+
+  it("replays historical assistant messages by ACP message id instead of the aggregated run result", async () => {
+    const request = vi.fn(async () => ({ status: 200, body: [{
+      id: "run-history", agent_id: "agent-1", status: "finished", prompt: "Research it",
+      result: "Checking.Browsing.Done with a giant aggregate", error: null,
+      created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z",
+    }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "run.status", data: { status: "finished" } });
+        listener({ event: "acp.event", id: "1", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-1", content: { text: "Checking." } } } } });
+        listener({ event: "acp.event", id: "2", data: { params: { update: { sessionUpdate: "tool_call", toolCallId: "tool-1" } } } });
+        listener({ event: "acp.event", id: "3", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: "Done" } } } } });
+        listener({ event: "acp.event", id: "4", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: " now." } } } } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    });
+    window.runtaCrew = { cloud: { request, subscribe }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+
+    const result = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(result.messages).toEqual([
+      expect.objectContaining({ id: "run-history:user", role: "user", parts: [{ type: "text", text: "Research it" }] }),
+      expect.objectContaining({ id: "run-history:agent:assistant-1", role: "agent", parts: [{ type: "text", text: "Checking." }], streaming: false }),
+      expect.objectContaining({ id: "run-history:agent:assistant-2", role: "agent", parts: [{ type: "text", text: "Done now." }], streaming: false }),
+    ]);
+    expect(JSON.stringify(result.messages)).not.toContain("giant aggregate");
   });
 });
