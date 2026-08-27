@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Agent, Message } from "@/domain/types";
 import { Conversation, MessageView } from "./Conversation";
@@ -11,6 +11,17 @@ describe("Conversation states", () => {
     const { container } = render(<MessageView message={message} activities={[]} />);
     expect(await screen.findByRole("list")).toHaveTextContent(/Build\s+Test/);
     expect(container.querySelector(".agent-markdown")).not.toHaveTextContent("**");
+  });
+
+  it("renders normal links and opens them in the system browser", async () => {
+    const openExternal = vi.fn(async () => undefined);
+    window.runtaCrew = { openExternal } as unknown as typeof window.runtaCrew;
+    const message: Message = { id: "agent-link", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Visit [runta.com](https://runta.com/docs)." }], createdAt: new Date().toISOString() };
+    render(<MessageView message={message} activities={[]} />);
+    const link = await screen.findByRole("link", { name: "runta.com" });
+    expect(link).toHaveAttribute("href", "https://runta.com/docs");
+    fireEvent.click(link);
+    expect(openExternal).toHaveBeenCalledWith("https://runta.com/docs");
   });
 
   it("renders a system event", () => {

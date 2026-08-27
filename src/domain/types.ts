@@ -25,7 +25,7 @@ export interface RespondApprovalInput { requestId: string; decision: "allow" | "
 export type ConversationEvent =
   | { type: "message.created"; message: Message }
   | { type: "message.delta"; messageId: string; delta: string }
-  | { type: "message.completed"; messageId: string }
+  | { type: "message.completed"; messageId: string; notify?: boolean }
   | { type: "message.updated"; message: Message }
   | { type: "activity.updated"; activity: ActivityEvent }
   | { type: "approval.updated"; approval: ApprovalRequest }

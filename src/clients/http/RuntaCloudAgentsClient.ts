@@ -122,25 +122,49 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const agentId = agentIdFromConversation(id);
     const observed = new Map<string, string>();
     const streams = new Map<string, () => void>();
+    const assistantStreams = new Map<string, { current?: string; seen: Set<string> }>();
     const bridge = window.runtaCrew?.cloud;
     const subscribeToRun = (run: RuntaRun) => {
       if (!bridge?.subscribe || streams.has(run.id) || terminalRunStatuses.has(run.status)) return;
       let terminal = false;
+      const assistant = { seen: new Set<string>() } as { current?: string; seen: Set<string> };
+      assistantStreams.set(run.id, assistant);
+      const completeCurrentAssistant = (notify = false) => {
+        if (!assistant.current) return;
+        listener({ type: "message.completed", messageId: assistant.current, notify });
+        assistant.current = undefined;
+      };
       const unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event: CloudStreamEvent) => {
         if (event.event === "run.status" && event.data && typeof event.data === "object") {
           const data = event.data as Partial<RuntaRun> & { session_id?: string | null };
           if (typeof data.status !== "string") return;
           const next: RuntaRun = { ...run, ...data, prompt: data.prompt ?? run.prompt, dsh_session_id: data.session_id ?? data.dsh_session_id ?? run.dsh_session_id };
           terminal = terminalRunStatuses.has(next.status);
-          const message = runMessages(next, id).find((candidate) => candidate.id === `${run.id}:agent`);
-          if (message) listener({ type: "message.updated", message });
-          if (terminal) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          if (terminal) completeCurrentAssistant(true);
+          if (assistant.seen.size === 0) {
+            const message = runMessages(next, id).find((candidate) => candidate.id === `${run.id}:agent`);
+            if (message) listener({ type: "message.updated", message });
+            if (terminal) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          }
           return;
         }
         if (event.event !== "acp.event" || terminal || !event.data || typeof event.data !== "object") return;
-        const payload = event.data as { params?: { update?: Record<string, unknown> & { sessionUpdate?: string; content?: { text?: string } } } };
+        const payload = event.data as { params?: { update?: Record<string, unknown> & { sessionUpdate?: string; messageId?: string; content?: { text?: string } } } };
         const update = payload.params?.update;
-        if (update?.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string" && update.content.text) listener({ type: "message.delta", messageId: `${run.id}:agent`, delta: update.content.text });
+        if (update?.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string" && update.content.text) {
+          const sourceId = stringValue(update.messageId) ?? "legacy";
+          const messageId = `${run.id}:agent:${sourceId}`;
+          if (!assistant.seen.has(messageId)) {
+            completeCurrentAssistant();
+            assistant.current = messageId;
+            assistant.seen.add(messageId);
+            listener({ type: "message.created", message: { id: messageId, conversationId: id, role: "agent", parts: [{ type: "text", text: update.content.text }], createdAt: new Date().toISOString(), streaming: true } });
+          } else {
+            assistant.current = messageId;
+            listener({ type: "message.delta", messageId, delta: update.content.text });
+          }
+        }
+        if (update?.sessionUpdate === "tool_call") completeCurrentAssistant();
         const activity = update ? activityFromToolUpdate(update, id) : undefined;
         if (activity) listener({ type: "activity.updated", activity });
       });
@@ -155,17 +179,17 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
           subscribeToRun(run);
           if (previous === undefined) {
             for (const message of runMessages(run, id)) listener({ type: "message.created", message });
-          } else if (previous !== signature) {
+          } else if (previous !== signature && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) {
             const agentMessage = runMessages(run, id).find((message) => message.id === `${run.id}:agent`);
             if (agentMessage) listener({ type: "message.updated", message: agentMessage });
           }
-          if (previous !== signature && terminalRunStatuses.has(run.status)) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          if (previous !== signature && terminalRunStatuses.has(run.status) && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) listener({ type: "message.completed", messageId: `${run.id}:agent` });
         }
         listener({ type: "connection.changed", state: "connected" });
       } catch { listener({ type: "connection.changed", state: "error" }); }
     };
     void poll(); const timer = window.setInterval(() => void poll(), 1000);
-    return { unsubscribe: () => { window.clearInterval(timer); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); } };
+    return { unsubscribe: () => { window.clearInterval(timer); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); assistantStreams.clear(); } };
   }
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }
