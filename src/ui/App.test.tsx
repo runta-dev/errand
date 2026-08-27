@@ -1,114 +1,138 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { App } from "./App";
+import { describe, expect, it, vi } from "vitest";
+import { AgentsLanding, App } from "./App";
+import { accountDisplayName } from "./accountDisplayName";
+import { nextAgentName } from "@/domain/agentName";
+import { AgentList } from "./components/AgentList";
+import { LoginPage } from "./components/LoginPage";
 import type { DesktopBridge } from "@/shared/desktop";
 
-describe("Runta Crew primary flows", () => {
-  it("switches agents and handles a scoped approval", async () => {
-    const user = userEvent.setup(); render(<App />);
-    await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: /^M Mira Needs approval$/ }));
-    await screen.findByText("Submit vendor renewal");
-    await user.type(screen.getByLabelText("Approval note"), "Approved for this form only");
-    await user.click(screen.getByRole("button", { name: "Allow once" }));
-    await waitFor(() => expect(screen.queryByText("Submit vendor renewal")).not.toBeInTheDocument());
+describe("Runta Crew authentication surfaces", () => {
+  it("adapts the landing copy to whether agents exist", () => {
+    const { rerender } = render(<AgentsLanding hasAgents={false} />);
+    expect(screen.getByText("Create your first agent to get started.")).toBeInTheDocument();
+    rerender(<AgentsLanding hasAgents />);
+    expect(screen.getByText("Choose an agent to get started.")).toBeInTheDocument();
   });
-
-  it("creates an agent and sends a message", async () => {
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: "New agent" }));
-    await user.type(screen.getByLabelText("Name"), "Scout"); await user.type(screen.getByLabelText("Role"), "Research lead"); await user.type(screen.getByLabelText("Initial goal"), "Track customer feedback");
-    await user.click(screen.getByRole("button", { name: "Create agent" }));
-    await screen.findByRole("heading", { name: "Scout", level: 1 });
-    const send = screen.getByLabelText("Send message"); expect(send).toBeDisabled();
-    expect([...send.querySelectorAll("path")].map((path) => path.getAttribute("d"))).toEqual(["m5 12 7-7 7 7", "M12 19V5"]);
-    await user.type(screen.getByLabelText("Message Scout"), "Start with this week's interviews"); expect(send).toBeEnabled(); await user.click(send);
-    expect(await screen.findByText("Start with this week's interviews")).toBeInTheDocument();
+  it("assigns unique single names before deterministic word pairs", () => {
+    const used: string[] = [];
+    for (let index = 0; index < 18; index += 1) { const name = nextAgentName(used); expect(used.map((value) => value.toLowerCase())).not.toContain(name.toLowerCase()); used.push(name); }
+    expect(used.slice(0, 3)).toEqual(["Atlas", "Scout", "Mira"]);
+    expect(used[16]).toBe("Amber Brook");
+    expect(used[17]).toBe("Amber Cedar");
+    expect(nextAgentName(["atlas"])).toBe("Scout");
   });
-
-  it("labels the computer surface as a safe mock", async () => {
-    render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    fireEvent.click(screen.getByRole("button", { name: "Open agent computer" }));
-    expect(screen.getByText("Safe mock preview")).toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "Take over" }));
-    await waitFor(() => expect(document.querySelector(".detail-panel")).toHaveAttribute("data-computer-action", "takeover"));
-    await waitFor(() => expect(document.querySelector(".computer-overlay")?.textContent).toContain("No remote desktop session is connected yet."));
+  it("derives a human account name from the authorized profile", () => {
+    expect(accountDisplayName({ email: "shiqi@runta.com" })).toBe("Shiqi");
+    expect(accountDisplayName({ email: "shiqi.mei@runta.com" })).toBe("Shiqi Mei");
+    expect(accountDisplayName({ email: "xydd@runta.com" })).toBe("Xydd");
+    expect(accountDisplayName({ display_name: "  Shiqi Mei  ", email: "ignored@runta.com" })).toBe("Shiqi Mei");
   });
-
-  it("opens the command palette from the native shortcut and switches agents", async () => {
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    fireEvent.keyDown(window, { key: "k", metaKey: true });
-    expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Search commands and agents"), "Patch");
-    await user.keyboard("{Enter}");
-    expect(await screen.findByRole("heading", { name: "Patch", level: 1 })).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
-  });
-
-  it("selects a local attachment through the typed desktop bridge and sends it", async () => {
+  it("keeps account actions in the username popover", async () => {
+    const opened: string[] = [];
     const bridge: DesktopBridge = {
-      getVersion: async () => "0.1.0", openExternal: async () => undefined,
+      getVersion: async () => "0.1.0", openExternal: async (url) => { opened.push(url); },
       settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => true },
-      attachments: { choose: async () => [{ id: "selected-1", name: "brief.pdf", size: 4200, mediaType: "application/pdf" }] },
+      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [] },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
     };
     window.runtaCrew = bridge;
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: "Attach files" }));
-    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Message Atlas"), "Please review this brief");
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("Please review this brief")).toBeInTheDocument();
-    expect(screen.getByText("4.1 KB · application/pdf")).toBeInTheDocument();
+    const user = userEvent.setup();
+    render(<AgentList agents={[]} selectedId="" search="" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+
+    const account = screen.getByRole("button", { name: "Shiqi Mei" });
+    await user.click(account);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([" Settings", " Join Discord", " Logout"]);
+    await user.click(screen.getByRole("menuitem", { name: "Join Discord" }));
+    expect(opened).toEqual(["https://discord.com/invite/62d4bkaTnS"]);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     delete window.runtaCrew;
   });
 
-  it("opens a validated agent deep link through the typed desktop bridge", async () => {
-    let listener: ((agentId: string) => void) | undefined;
+  it("shows immediate feedback while an agent is being created", () => {
+    render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("status")).toHaveTextContent("AtlasCreating…");
+    expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+  });
+
+  it("does not duplicate a creating row when polling sees the new server agent first", () => {
+    const existing = { id: "existing", name: "Scout", role: "Cloud coding agent", goal: "Scout", status: "idle" as const, avatar: "S", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "existing" };
+    const created = { ...existing, id: "created", status: "working" as const, computerId: "created" };
+    const props = { selectedId: "", search: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
+    const { rerender } = render(<AgentList {...props} agents={[existing, created]} creatingAgentName="Scout" creatingAgentBaselineIds={new Set([existing.id])} />);
+
+    expect(screen.getAllByText("Scout")).toHaveLength(2);
+    expect(screen.getByText("Creating…")).toBeInTheDocument();
+
+    rerender(<AgentList {...props} agents={[existing, created]} />);
+    expect(screen.getAllByText("Scout")).toHaveLength(2);
+    expect(screen.queryByText("Creating…")).not.toBeInTheDocument();
+  });
+
+  it("distinguishes an empty crew from an empty search result", () => {
+    const props = { agents: [], selectedId: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
+    const { rerender } = render(<AgentList {...props} search="" />);
+    expect(screen.getByText("No agents yet")).toBeInTheDocument();
+    rerender(<AgentList {...props} search="missing" />);
+    expect(screen.getByText("No agents found")).toBeInTheDocument();
+  });
+
+  it("shows only Agent actions backed by the Cloud Agents API", async () => {
+    const user = userEvent.setup(); const atlas = { id: "atlas", name: "Atlas", role: "Cloud coding agent", goal: "Atlas", status: "idle" as const, avatar: "A", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "atlas" };
+    render(<AgentList agents={[atlas]} selectedId="atlas" search="" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([" Edit agent", " Delete agent"]);
+    expect(screen.queryByText("Duplicate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark as unread")).not.toBeInTheDocument();
+  });
+
+  it("shows the standalone OAuth page when no credential exists", async () => {
+    const cloudRequest = vi.fn();
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
-      settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [] },
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
+      cloud: { request: cloudRequest, subscribe: () => () => undefined },
       notifications: { show: async () => true, setBadge: async () => undefined },
-      deepLinks: { onOpenAgent: (next) => { listener = next; return () => { listener = undefined; }; } },
+      deepLinks: { onOpenAgent: () => () => undefined },
     };
-    window.runtaCrew = bridge; render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await act(() => listener?.("patch"));
-    expect(await screen.findByRole("heading", { name: "Patch", level: 1 })).toBeInTheDocument(); delete window.runtaCrew;
+    window.runtaCrew = bridge;
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Runta Crew", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Runta account" })).not.toBeInTheDocument();
+    expect(cloudRequest).not.toHaveBeenCalled();
+    delete window.runtaCrew;
   });
 
-  it("records useful feedback on an agent message", async () => {
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await screen.findByText(/I’m grouping the feedback/);
-    const reaction = screen.getByRole("button", { name: "Mark as useful" });
-    expect(reaction).toHaveAttribute("aria-pressed", "false"); await user.click(reaction);
-    await waitFor(() => expect(reaction).toHaveAttribute("aria-pressed", "true"));
-    expect(reaction).toHaveTextContent("1");
+  it("does not expose Electron IPC errors on sign-in failure", async () => {
+    const bridge: DesktopBridge = {
+      getVersion: async () => "0.1.0", openExternal: async () => undefined,
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
+      credentials: { has: async () => false, set: async () => false },
+      auth: { start: async () => { throw new Error("Error invoking remote method 'auth:start': Error: Device authorization failed (401)"); }, status: async () => "error", logout: async () => true },
+      attachments: { choose: async () => [] }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
+    };
+    window.runtaCrew = bridge;
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("This Runta environment does not support Crew sign-in yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
+    delete window.runtaCrew;
   });
 
-  it("edits and marks an agent read from scoped row actions", async () => {
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
-    await user.click(screen.getByRole("menuitem", { name: "Mark as read" }));
-    await user.click(screen.getByRole("button", { name: "More actions for Atlas" }));
-    expect(await screen.findByRole("menuitem", { name: "Mark as unread" })).toBeInTheDocument();
-    await user.click(screen.getByRole("menuitem", { name: "Edit agent" }));
-    const name = screen.getByLabelText("Name"); await user.clear(name); await user.type(name, "Atlas Prime");
-    await user.click(screen.getByRole("button", { name: "Save agent" }));
-    expect(await screen.findByRole("heading", { name: "Atlas Prime", level: 1 })).toBeInTheDocument();
+  it("keeps connection configuration behind the development gesture", () => {
+    render(<LoginPage status="idle" allowConnectionSettings onSignIn={() => undefined} onSettings={() => undefined} />);
+    expect(screen.queryByRole("button", { name: "Connection settings" })).not.toBeInTheDocument();
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(window, { key: "Control" });
+    expect(screen.getByRole("button", { name: "Connection settings" })).toBeInTheDocument();
   });
 
-  it("duplicates and safely deletes an agent", async () => {
-    const user = userEvent.setup(); render(<App />); await screen.findByRole("heading", { name: "Atlas", level: 1 });
-    await user.click(screen.getByRole("button", { name: "More actions for Patch" }));
-    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
-    expect(await screen.findByRole("heading", { name: "Patch copy", level: 1 })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "More actions for Patch copy" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete agent" }));
-    expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Delete agent" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "More actions for Patch copy" })).not.toBeInTheDocument());
+  it("never exposes connection configuration in production mode", () => {
+    render(<LoginPage status="idle" allowConnectionSettings={false} onSignIn={() => undefined} onSettings={() => undefined} />);
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(window, { key: "Control" });
+    expect(screen.queryByRole("button", { name: "Connection settings" })).not.toBeInTheDocument();
   });
 });

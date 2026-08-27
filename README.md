@@ -1,65 +1,78 @@
+<div align="center">
+
 # Runta Crew
 
-Runta Crew is the desktop client for creating, messaging, and supervising Runta Cloud Agents. Each agent is modeled as a persistent AI teammate working inside a Runta Runtime cloud computer.
+### Your cloud agents, ready to take on real work.
 
-![Runta Crew main window](./docs/screenshots/main-window.png)
+Create a crew. Give them a job. Come back to finished work.
 
-> **Current status:** this repository is an installable Electron MVP running entirely against `MockCloudAgentsClient`. It is not connected to the Runta Cloud Agents service, and the computer preview is intentionally labeled as a mock. See [API_INTEGRATION.md](./API_INTEGRATION.md) for the backend contract still to be confirmed.
+[Runta](https://runta.com) · macOS · Powered by Runta Cloud Agents
 
-## What works today
+</div>
 
-- Search, switch, and create named agents with roles and goals.
-- Edit, pin, duplicate, mark read/unread, and safely delete agents.
-- Display working, idle, approval-required, and offline states.
-- Persistent-style conversations with user, agent, system, and activity data models.
-- Mock streaming responses and structured browser/file activity.
-- Native attachment selection with opaque IDs, safe metadata previews, removal, and size validation.
-- Useful/needs-work message reactions.
-- Scoped approval review with explicit Allow once / Deny actions and notes.
-- Cloud computer status plus safe mock Open / Take over surfaces.
-- Connection, theme, notification, credential, and About settings.
-- OS-encrypted credential storage through Electron `safeStorage`.
-- Focus-aware OS notifications and macOS unread dock badges.
-- Single-instance `runta-crew://agent/<id>` deep links.
-- macOS native window/menu, DMG/ZIP packaging, and a native packaged-app smoke check.
+![Runta Crew](./docs/screenshots/main-window.gif)
 
-## Development
+## Your AI team has a computer now
 
-Requires Node.js 22+ and npm 10+ on macOS.
+Runta Crew is a desktop home for persistent cloud agents. Each teammate runs inside its own Runta Runtime, keeps its workspace, and continues working after you close the app.
+
+No tab jungle. No babysitting terminal sessions. Just message your crew and let them work.
+
+## Built for delegation
+
+- **A crew that sticks around** — create focused agents with persistent cloud workspaces.
+- **Real work, not chat theater** — follow live activity, tool use, approvals, and results.
+- **Pick up where you left off** — conversations and completed runs stay with each agent.
+- **Cloud-native by default** — the desktop app connects directly to Runta Cloud Agents.
+- **Quietly native** — a fast, minimal macOS experience with notifications and deep links.
+- **Secure at the boundary** — device authorization and credentials protected by Electron `safeStorage`.
+
+## Run it locally
+
+Requires macOS, Node.js 22+, and npm 10+.
 
 ```bash
+git clone https://github.com/runta-dev/runta-crew.git
+cd runta-crew
 npm ci
 npm run dev
 ```
 
-The first screen uses the light theme. No account or backend is required in mock mode.
+The development app connects to:
 
-## Verification
+- Cloud Agents API: `https://api.forge`
+- Runta Dashboard: `https://app.forge`
+
+Runta Crew uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
+
+## Ship with confidence
 
 ```bash
 npm run typecheck
 npm run lint
 npm test
 npm run build
+```
+
+For the authenticated end-to-end flow:
+
+```bash
+RUNTA_CREW_E2E_TOKEN=... npm run test:e2e
+```
+
+Package and smoke-test the macOS app:
+
+```bash
 npm run package
 npm run smoke
 ```
 
-Packaged artifacts are written under `release/`. The app is ad-hoc signed for local development; production distribution will require the Runta Developer ID identity, notarization, and an approved update service.
+Artifacts are written to `release/`. Local builds are ad-hoc signed; public distribution requires Runta signing, notarization, and an approved update channel.
 
-## Architecture
+## Under the hood
 
-- `electron/main`: native window lifecycle, safe external navigation, settings persistence, OS credential encryption.
-- `electron/preload`: small typed bridge; no generic IPC or Node primitives.
-- `src/domain`: stable Cloud Agents types and ports.
-- `src/clients/mock`: local demo transport and separate fixtures.
-- `src/clients/http`: endpoint/auth/error/cancellation adapter with route injection.
-- `src/state`: renderer orchestration and event subscription lifecycle.
-- `src/ui`: presentation and focused interaction components.
+Runta Crew keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for process and security boundaries.
-See [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) for the UI necessity, whitespace, border, and immediate-comprehension rules.
+## Independent implementation
 
-## Relationship to the reference project
-
-Grok Bot 0.18 Reconstructed was used only to study the high-level product shape and Electron boundaries. Its provenance states that no upstream source-code license is implied. Runta Crew therefore contains an independent implementation and does not copy its source, binaries, assets, private interfaces, account system, telemetry, updater, or trademarks.
+Grok Bot 0.18 Reconstructed was studied for product shape and Electron boundaries. Runta Crew is an independent implementation and does not copy its source, binaries, assets, private interfaces, account system, telemetry, updater, or trademarks.

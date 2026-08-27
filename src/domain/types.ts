@@ -1,33 +1,31 @@
 export type AgentStatus = "working" | "idle" | "waiting_for_approval" | "offline";
 export type ConnectionState = "connected" | "connecting" | "disconnected" | "error";
 export type MessageRole = "user" | "agent" | "system";
-export type ReactionKind = "useful" | "needs_work";
 
 export interface Agent {
   id: string; name: string; role: string; goal: string; status: AgentStatus;
-  avatar: string; lastActiveAt: string; unreadCount: number; computerId: string; pinned?: boolean;
+  avatar: string; lastActiveAt: string; unreadCount: number; computerId: string; pinned?: boolean; lastMessagePreview?: string;
 }
 export interface TextPart { type: "text"; text: string }
 export interface ActivityPart { type: "activity"; activityId: string }
 export interface Attachment { id: string; name: string; size: number; mediaType: string; source: "local-selection" | "cloud" }
 export interface AttachmentPart { type: "attachment"; attachment: Attachment }
 export type MessagePart = TextPart | ActivityPart | AttachmentPart;
-export interface MessageReaction { kind: ReactionKind; count: number; selected: boolean }
-export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean; reactions?: MessageReaction[] }
+export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean }
 export interface Conversation { id: string; agentId: string; title: string; updatedAt: string }
 export type ActivityStatus = "running" | "completed" | "failed";
 export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; status: ActivityStatus; createdAt: string }
 export interface ApprovalRequest { id: string; agentId: string; conversationId: string; title: string; description: string; scope: string[]; status: "pending" | "allowed" | "denied"; createdAt: string; responseNote?: string }
-export interface CloudComputer { id: string; agentId: string; runtimeName: string; status: "online" | "starting" | "offline"; activeApp?: string; previewKind: "mock" | "remote"; capabilities: Array<"open" | "takeover"> }
-export interface CreateAgentInput { name: string; role: string; goal: string }
+export interface CloudComputer { id: string; agentId: string; runtimeName: string; status: "online" | "starting" | "offline"; activeApp?: string; previewUrl?: string; capabilities: Array<"open" | "takeover"> }
+export interface ModelProviderOption { id: string; name: string; protocol: string; defaultModel?: string }
+export interface CreateAgentInput { name: string; modelProviderId: string }
 export interface UpdateAgentInput { name?: string; role?: string; goal?: string; pinned?: boolean }
 export interface SendMessageInput { conversationId: string; text: string; attachments?: Attachment[]; signal?: AbortSignal }
 export interface RespondApprovalInput { requestId: string; decision: "allow" | "deny"; note?: string }
-export interface ReactToMessageInput { conversationId: string; messageId: string; reaction: ReactionKind }
 export type ConversationEvent =
   | { type: "message.created"; message: Message }
   | { type: "message.delta"; messageId: string; delta: string }
-  | { type: "message.completed"; messageId: string }
+  | { type: "message.completed"; messageId: string; notify?: boolean }
   | { type: "message.updated"; message: Message }
   | { type: "activity.updated"; activity: ActivityEvent }
   | { type: "approval.updated"; approval: ApprovalRequest }

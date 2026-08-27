@@ -1,9 +1,11 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
+    tags: ["*"]
 
 jobs:
   verify:
@@ -19,6 +21,18 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  artifact:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run package
       - run: npm run smoke
       - uses: actions/upload-artifact@v4

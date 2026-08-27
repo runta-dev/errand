@@ -1,6 +1,7 @@
-import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ReactToMessageInput, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
+import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderOption, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
 
 export interface CloudAgentsClient {
+  listModelProviders(signal?: AbortSignal): Promise<ModelProviderOption[]>;
   listAgents(signal?: AbortSignal): Promise<Agent[]>;
   getAgent(agentId: string, signal?: AbortSignal): Promise<Agent>;
   createAgent(input: CreateAgentInput, signal?: AbortSignal): Promise<Agent>;
@@ -11,12 +12,11 @@ export interface CloudAgentsClient {
   listConversations(agentId: string, signal?: AbortSignal): Promise<Conversation[]>;
   getConversation(conversationId: string, signal?: AbortSignal): Promise<{ conversation: Conversation; messages: Message[] }>;
   sendMessage(input: SendMessageInput): Promise<Message>;
-  reactToMessage(input: ReactToMessageInput, signal?: AbortSignal): Promise<Message>;
   subscribeToConversationEvents(conversationId: string, listener: (event: ConversationEvent) => void): Subscription;
   listApprovalRequests(agentId?: string, signal?: AbortSignal): Promise<ApprovalRequest[]>;
   respondToApproval(input: RespondApprovalInput, signal?: AbortSignal): Promise<ApprovalRequest>;
   getComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputer>;
-  openComputer(agentId: string, signal?: AbortSignal): Promise<{ url?: string; mode: "mock" | "remote" }>;
-  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<{ url?: string; mode: "mock" | "remote" }>;
+  openComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
+  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
   reconnect(signal?: AbortSignal): Promise<void>;
 }
