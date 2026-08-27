@@ -60,11 +60,12 @@ describe("Conversation states", () => {
     expect(container.querySelector(".streaming-caret")).not.toBeInTheDocument();
   });
 
-  it("exposes the current tool label on the working row", () => {
+  it("shows the latest progress message directly on the working row", () => {
     const message: Message = { id: "run-2:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking now" }], createdAt: new Date().toISOString(), streaming: true };
-    render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
-    expect(screen.getByRole("status", { name: "Agent is working: Reading file" })).toBeInTheDocument();
-    expect(screen.getByText("Reading file")).toHaveClass("agent-working-progress");
+    const { container } = render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
+    expect(screen.getByRole("status", { name: "Agent is working: Checking now" })).toBeInTheDocument();
+    expect(screen.getByText("Checking now")).toHaveClass("agent-working-progress");
+    expect(container.querySelector(".message-body")).not.toBeInTheDocument();
   });
 
   it("animates a user entry and the final agent response at their actual state transitions", () => {

@@ -70,6 +70,8 @@ button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{ba
 @media (max-width:1080px){.palette-trigger span{display:none}.palette-trigger{width:32px;justify-content:center}.palette-trigger kbd{display:none}}
 .screen-trigger:disabled{opacity:1}
 .agent-working-indicator{cursor:default;user-select:none}
+.agent-working-progress,.agent-working-indicator:hover .agent-working-progress{max-width:min(520px,calc(100vw - 180px));margin-left:10px;animation:agent-tool-shimmer 1.35s linear infinite;opacity:1;text-overflow:ellipsis}
+@media (prefers-reduced-motion:reduce){.agent-working-progress,.agent-working-indicator:hover .agent-working-progress{animation:none;color:var(--muted)}}
 .conversation-header{padding-right:18px;padding-left:22px}
 .composer-bottom>.submit-button[data-state="stopping"]:disabled{background:var(--text);color:var(--surface);opacity:1}.composer-bottom>.submit-button .stop-icon{width:20px;height:20px}
 .message.user .message-body{border-radius:14px}
