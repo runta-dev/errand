@@ -130,7 +130,8 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const bridge = window.runtaCrew?.cloud;
     if (!bridge?.subscribe || !terminalRunStatuses.has(run.status) || signal?.aborted) return Promise.resolve(fallback);
     return new Promise((resolve) => {
-      const messages = new Map<string, Message>();
+      let current: Message | undefined;
+      let sawAssistant = false;
       let settled = false;
       let unsubscribe: () => void = () => undefined;
       const finish = () => {
@@ -139,11 +140,10 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         window.clearTimeout(timeout);
         signal?.removeEventListener("abort", finish);
         unsubscribe();
-        const replayed = [...messages.values()];
-        if (!replayed.length) { resolve(fallback); return; }
+        if (!sawAssistant) { resolve(fallback); return; }
         resolve([
           ...fallback.filter((message) => message.role === "user"),
-          ...replayed,
+          ...(current ? [current] : []),
           ...fallback.filter((message) => message.role === "system"),
         ]);
       };
@@ -151,23 +151,27 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       signal?.addEventListener("abort", finish, { once: true });
       unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
         if (event.event === "stream.closed" || event.event === "error") { finish(); return; }
+        if (event.event === "acp.event" && event.data && typeof event.data === "object") {
+          const payload = event.data as { params?: { update?: { sessionUpdate?: string } } };
+          if (payload.params?.update?.sessionUpdate === "tool_call") { current = undefined; return; }
+        }
         const chunk = assistantChunk(event);
         if (!chunk) return;
+        sawAssistant = true;
         const messageId = `${run.id}:agent:${chunk.sourceId}`;
-        const current = messages.get(messageId);
-        if (current) {
+        if (current?.id === messageId) {
           const part = current.parts[0];
           if (part?.type === "text") part.text += chunk.text;
           return;
         }
-        messages.set(messageId, {
+        current = {
           id: messageId,
           conversationId: id,
           role: "agent",
           parts: [{ type: "text", text: chunk.text }],
           createdAt: run.updated_at ?? run.created_at ?? new Date().toISOString(),
           streaming: false,
-        });
+        };
       });
     });
   }

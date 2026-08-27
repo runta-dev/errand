@@ -115,7 +115,16 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         });
         setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: `${agent.lastMessagePreview ?? ""}${event.delta}` } : agent));
       }
-      if (event.type === "message.completed") { const visualId = visualMessageIds.current.get(event.messageId) ?? event.messageId; updateMessages((current) => current.map((message) => message.id === visualId ? { ...message, streaming: false } : message)); if (event.notify !== false) void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." }); }
+      if (event.type === "message.completed") {
+        const visualId = visualMessageIds.current.get(event.messageId) ?? event.messageId;
+        if (event.notify === false) {
+          updateMessages((current) => current.filter((message) => message.id !== visualId));
+          setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: undefined } : agent));
+        } else {
+          updateMessages((current) => current.map((message) => message.id === visualId ? { ...message, streaming: false } : message));
+          void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." });
+        }
+      }
       if (event.type === "message.updated") {
         updateMessages((current) => { let visualId = visualMessageIds.current.get(event.message.id); if (!visualId && event.message.role === "agent") { const claimedVisualIds = new Set(visualMessageIds.current.values()); const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id)); if (optimistic) { visualId = optimistic.id; visualMessageIds.current.set(event.message.id, visualId); } } const nextMessage = visualId ? { ...event.message, id: visualId } : event.message; return current.some((message) => message.id === nextMessage.id) ? current.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...current, nextMessage]; });
         if (event.message.role === "agent") setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));

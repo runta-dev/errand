@@ -89,9 +89,9 @@ describe("RuntaCloudAgentsClient", () => {
 
     expect(result.messages).toEqual([
       expect.objectContaining({ id: "run-history:user", role: "user", parts: [{ type: "text", text: "Research it" }] }),
-      expect.objectContaining({ id: "run-history:agent:assistant-1", role: "agent", parts: [{ type: "text", text: "Checking." }], streaming: false }),
       expect.objectContaining({ id: "run-history:agent:assistant-2", role: "agent", parts: [{ type: "text", text: "Done now." }], streaming: false }),
     ]);
+    expect(JSON.stringify(result.messages)).not.toContain("Checking.");
     expect(JSON.stringify(result.messages)).not.toContain("giant aggregate");
   });
 });
