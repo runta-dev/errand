@@ -59,6 +59,14 @@ describe("Conversation states", () => {
     expect(container.querySelector(".skeleton-bubble")?.parentElement).toHaveClass("skeleton-user");
   });
 
+  it("keeps a bottom safe area for late-rendering conversation content", () => {
+    const message: Message = { id: "agent-late-layout", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "A long final response" }], createdAt: new Date().toISOString() };
+    const { container } = render(<Conversation agent={agent} messages={[message]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+
+    expect(container.querySelector(".message-content")).toBeInTheDocument();
+    expect(container.querySelector(".message-content")?.parentElement).toHaveClass("message-scroll");
+  });
+
   it("focuses the composer when a new-agent focus request arrives", () => {
     const { rerender } = render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
     const composer = screen.getByRole("textbox", { name: "Message Atlas" });
