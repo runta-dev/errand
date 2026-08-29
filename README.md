@@ -40,8 +40,8 @@ npm run dev
 
 The development app connects to:
 
-- Cloud Agents API: `https://api.forge`
-- Runta Dashboard: `https://app.forge`
+- Cloud Agents API: `https://api.runta.com`
+- Runta Dashboard: `https://dashboard.runta.com`
 
 Runta Crew uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
 

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import type { Agent, ModelProviderOption, UpdateAgentInput } from "@/domain/types";
 import type { AppSettings, ThemePreference } from "@/shared/desktop";
+import { DEFAULT_RUNTA_API_URL, DEFAULT_RUNTA_DASHBOARD_URL } from "@/shared/runtaEndpoints";
 import { Select } from "./Select";
 
 function DialogShell({ title, children, onClose }: { title: string; children: React.ReactNode; onClose(): void }) { return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="dialog" role="dialog" aria-modal="true" aria-label={title}><header><h2>{title}</h2><button type="button" className="icon-button" aria-label="Close" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={18} /></button></header>{children}</section></div>; }
@@ -15,7 +16,7 @@ export function DeleteAgentDialog({ agent, onClose, onDelete }: { agent: Agent; 
   return <DialogShell title={`Delete ${agent.name}?`} onClose={onClose}><div className="delete-agent-copy"><p>This permanently removes the cloud agent and its runtime data.</p><strong>This action cannot be undone.</strong></div><div className="dialog-actions delete-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button destructive-button" onClick={remove}>Delete agent</button></div></DialogShell>;
 }
 export function SettingsDialog({ mode = "preferences", providers = [], accountName = "Runta account", accountEmail = "", onLogout, onClose }: { mode?: "connection" | "preferences"; providers?: ModelProviderOption[]; accountName?: string; accountEmail?: string; onLogout?(): void; onClose(): void }) {
-  const [settings, setSettings] = useState<AppSettings>({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true });
+  const [settings, setSettings] = useState<AppSettings>({ endpoint: DEFAULT_RUNTA_API_URL, dashboardUrl: DEFAULT_RUNTA_DASHBOARD_URL, theme: "light", notifications: true });
   useEffect(() => { void window.runtaCrew?.settings.get().then(setSettings); }, []);
   async function save(event: FormEvent) {
     event.preventDefault(); await window.runtaCrew?.settings.set(settings);

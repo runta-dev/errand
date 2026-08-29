@@ -3,12 +3,13 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationStatus } from "../../src/shared/desktop";
+import { DEFAULT_RUNTA_API_URL, DEFAULT_RUNTA_DASHBOARD_URL, deviceAuthorizationRequest, deviceAuthorizationUrl, deviceTokenRequest, deviceTokenUrl, normalizeRuntaApiUrl, normalizeRuntaDashboardUrl } from "../../src/shared/runtaEndpoints";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
-const defaultSettings: AppSettings = { endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true };
+const defaultSettings: AppSettings = { endpoint: DEFAULT_RUNTA_API_URL, dashboardUrl: DEFAULT_RUNTA_DASHBOARD_URL, theme: "light", notifications: true };
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
 const selectedAttachmentPaths = new Map<string, string>();
@@ -38,9 +39,9 @@ function loadSettings(): AppSettings {
   try {
     const value = JSON.parse(readFileSync(settingsFile(), "utf8")) as Partial<AppSettings>;
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
-    const configuredEndpoint = typeof value.endpoint === "string" ? value.endpoint.trim() : "";
-    const endpoint = configuredEndpoint === "https://app.forge/api" ? defaultSettings.endpoint : configuredEndpoint;
-    return { endpoint: isDev && endpoint ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev && typeof value.dashboardUrl === "string" && value.dashboardUrl.trim() ? value.dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme, modelProviderId: typeof value.modelProviderId === "string" && value.modelProviderId.trim() ? value.modelProviderId : undefined };
+    const endpoint = normalizeRuntaApiUrl(typeof value.endpoint === "string" ? value.endpoint : undefined);
+    const dashboardUrl = normalizeRuntaDashboardUrl(typeof value.dashboardUrl === "string" ? value.dashboardUrl : undefined);
+    return { endpoint: isDev ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme, modelProviderId: typeof value.modelProviderId === "string" && value.modelProviderId.trim() ? value.modelProviderId : undefined };
   } catch { return settings; }
 }
 
@@ -137,31 +138,31 @@ ipcMain.handle("auth:logout", async () => {
 });
 ipcMain.handle("auth:start", async () => {
   if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
-  const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-  const response = await net.fetch(new URL("v1/auth/device/authorization", apiBase).toString(), {
+  const dashboardUrl = settings.dashboardUrl;
+  const response = await net.fetch(deviceAuthorizationUrl(dashboardUrl), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: "runta_crew", device_name: `Runta Crew on ${process.platform}`, app_url: settings.dashboardUrl.replace(/\/+$/, "") }),
+    body: JSON.stringify(deviceAuthorizationRequest(`Runta Crew on ${process.platform}`)),
   });
   if (!response.ok) throw new Error(`Device authorization failed (${response.status})`);
-  const envelope = await response.json() as { data: { device_code: string; user_code: string; verification_uri_complete: string; expires_at: string; interval: number } };
+  const authorization = await response.json() as { deviceCode: string; userCode: string; verificationUriComplete: string; expiresAt: string; interval: number };
   authorizationStatus = "pending";
   const poll = async () => {
-    let interval = Math.max(5, envelope.data.interval || 5);
-    const expiresAt = Date.parse(envelope.data.expires_at);
+    let interval = Math.max(5, authorization.interval || 5);
+    const expiresAt = Date.parse(authorization.expiresAt);
     while (authorizationStatus === "pending") {
       await new Promise((resolve) => setTimeout(resolve, interval * 1000));
       if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) { authorizationStatus = "expired"; return; }
       let tokenResponse: Response;
       try {
-        tokenResponse = await net.fetch(new URL("v1/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+        tokenResponse = await net.fetch(deviceTokenUrl(dashboardUrl), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(deviceTokenRequest(authorization.deviceCode)) });
       } catch {
         continue;
       }
       if (tokenResponse.ok) {
-        const token = await tokenResponse.json() as { access_token: string };
+        const token = await tokenResponse.json() as { accessToken: string };
         if (!safeStorage.isEncryptionAvailable()) { authorizationStatus = "error"; return; }
-        writeFileSync(credentialFile(), safeStorage.encryptString(token.access_token), { mode: 0o600 });
+        writeFileSync(credentialFile(), safeStorage.encryptString(token.accessToken), { mode: 0o600 });
         authorizationStatus = "authorized";
         if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
         if (process.platform === "darwin") app.focus({ steal: true });
@@ -175,8 +176,8 @@ ipcMain.handle("auth:start", async () => {
     }
   };
   void poll();
-  await shell.openExternal(envelope.data.verification_uri_complete);
-  return { verificationUrl: envelope.data.verification_uri_complete, userCode: envelope.data.user_code, expiresAt: envelope.data.expires_at };
+  await shell.openExternal(authorization.verificationUriComplete);
+  return { verificationUrl: authorization.verificationUriComplete, userCode: authorization.userCode, expiresAt: authorization.expiresAt };
 });
 ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
   if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");

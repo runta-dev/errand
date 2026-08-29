@@ -92,7 +92,7 @@ describe("Runta Crew authentication surfaces", () => {
     const cloudRequest = vi.fn();
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
-      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
+      settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
       cloud: { request: cloudRequest, subscribe: () => () => undefined },
       notifications: { show: async () => true, setBadge: async () => undefined },
@@ -110,7 +110,7 @@ describe("Runta Crew authentication surfaces", () => {
   it("does not expose Electron IPC errors on sign-in failure", async () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
-      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings) => settings },
+      settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false },
       auth: { start: async () => { throw new Error("Error invoking remote method 'auth:start': Error: Device authorization failed (401)"); }, status: async () => "error", logout: async () => true },
       attachments: { choose: async () => [] }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
