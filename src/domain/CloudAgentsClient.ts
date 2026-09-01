@@ -1,7 +1,7 @@
-import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderOption, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
+import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderCatalog, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
 
 export interface CloudAgentsClient {
-  listModelProviders(signal?: AbortSignal): Promise<ModelProviderOption[]>;
+  listModelProviders(signal?: AbortSignal): Promise<ModelProviderCatalog>;
   listAgents(signal?: AbortSignal): Promise<Agent[]>;
   getAgent(agentId: string, signal?: AbortSignal): Promise<Agent>;
   createAgent(input: CreateAgentInput, signal?: AbortSignal): Promise<Agent>;

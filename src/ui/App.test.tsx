@@ -6,9 +6,23 @@ import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
 import { AgentList } from "./components/AgentList";
 import { LoginPage } from "./components/LoginPage";
-import type { DesktopBridge } from "@/shared/desktop";
+import { SettingsDialog } from "./components/Dialogs";
+import type { AppSettings, DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew authentication surfaces", () => {
+  it("opens the dashboard add-provider page when no providers exist", async () => {
+    const openExternal = vi.fn(async () => undefined); const user = userEvent.setup();
+    window.runtaCrew = {
+      openExternal,
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
+    } as unknown as DesktopBridge;
+    render(<SettingsDialog organizationId="org-a/b" providers={[]} onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Model provider" }));
+    await user.click(screen.getByRole("option", { name: "Add model provider" }));
+    expect(openExternal).toHaveBeenCalledWith("https://app.forge/org/org-a%2Fb/secrets/providers/new");
+    delete window.runtaCrew;
+  });
+
   it("adapts the landing copy to whether agents exist", () => {
     const { rerender } = render(<AgentsLanding hasAgents={false} />);
     expect(screen.getByText("Create your first agent to get started.")).toBeInTheDocument();
