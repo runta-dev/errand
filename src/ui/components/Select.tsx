@@ -11,8 +11,8 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
     if (!open) return;
     const position = () => {
       const bounds = root.current?.getBoundingClientRect(); if (!bounds) return;
-      const gap = 5; const margin = 8; const desiredHeight = Math.min(220, options.length * 32 + 10); const roomBelow = window.innerHeight - bounds.bottom - margin; const openUp = roomBelow < desiredHeight && bounds.top - margin > roomBelow;
-      setMenuStyle({ position: "fixed", zIndex: 100, left: Math.min(bounds.left, window.innerWidth - Math.max(bounds.width, 180) - margin), top: openUp ? Math.max(margin, bounds.top - desiredHeight - gap) : bounds.bottom + gap, width: Math.max(bounds.width, 180), maxHeight: openUp ? Math.min(220, bounds.top - gap - margin) : Math.min(220, roomBelow) });
+      const gap = 5; const margin = 8; const width = Math.max(bounds.width, 180); const desiredHeight = Math.min(220, options.length * 32 + 10); const roomBelow = window.innerHeight - bounds.bottom - margin; const openUp = roomBelow < desiredHeight && bounds.top - margin > roomBelow;
+      setMenuStyle({ position: "fixed", zIndex: 100, left: Math.max(margin, Math.min(bounds.right - width, window.innerWidth - width - margin)), top: openUp ? Math.max(margin, bounds.top - desiredHeight - gap) : bounds.bottom + gap, width, maxHeight: openUp ? Math.min(220, bounds.top - gap - margin) : Math.min(220, roomBelow) });
     };
     const close = (event: PointerEvent) => { const target = event.target as Node; if (!root.current?.contains(target) && !menu.current?.contains(target)) setOpen(false); };
     position(); window.addEventListener("pointerdown", close); window.addEventListener("resize", position); window.addEventListener("scroll", position, true);
@@ -30,6 +30,6 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
       if (event.key === "Escape") { setOpen(false); return; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(event.key === "ArrowDown" ? 1 : -1); setOpen(true); }
     }}><span>{selected?.label ?? placeholder}</span><span className="crew-select-chevron"><ChevronDown size={15} /></span></button>
-    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}><span className="crew-select-check">{!option.action && option.value === value && <Check size={14} />}</span><span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
+    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" className={option.action ? "crew-select-action" : undefined} role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}>{!option.action && <span className="crew-select-check">{option.value === value && <Check size={14} />}</span>}<span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
   </div>;
 }
