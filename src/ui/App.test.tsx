@@ -17,9 +17,20 @@ describe("Runta Crew authentication surfaces", () => {
       settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
     } as unknown as DesktopBridge;
     render(<SettingsDialog organizationId="org-a/b" providers={[]} onClose={() => undefined} />);
-    await user.click(screen.getByRole("button", { name: "Model provider" }));
-    await user.click(screen.getByRole("option", { name: "Add model provider" }));
+    await user.click(screen.getByRole("button", { name: "Add model provider" }));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(openExternal).toHaveBeenCalledWith("https://app.forge/org/org-a%2Fb/secrets/providers/new");
+    delete window.runtaCrew;
+  });
+
+  it("notifies when the model-provider picker opens", async () => {
+    const onModelProviderOpen = vi.fn(); const user = userEvent.setup();
+    window.runtaCrew = {
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
+    } as unknown as DesktopBridge;
+    render(<SettingsDialog providers={[]} onModelProviderOpen={onModelProviderOpen} onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Add model provider" }));
+    expect(onModelProviderOpen).toHaveBeenCalledOnce();
     delete window.runtaCrew;
   });
 
