@@ -7,6 +7,18 @@ import { useCrewController } from "./useCrewController";
 const agent = (id: string, name: string): Agent => ({ id, name, role: "Cloud coding agent", goal: name, status: "idle", avatar: name[0]!, lastActiveAt: new Date(0).toISOString(), unreadCount: 0, computerId: id });
 
 describe("useCrewController", () => {
+  it("refreshes the model-provider catalog on demand", async () => {
+    let providers = [] as Awaited<ReturnType<CloudAgentsClient["listModelProviders"]>>["providers"];
+    const listModelProviders = vi.fn(async () => ({ organizationId: "org-test", providers }));
+    const client = { listModelProviders, listAgents: async () => [] } as unknown as CloudAgentsClient;
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    providers = [{ id: "provider-1", name: "OpenAI", protocol: "openai_responses" }];
+    await act(async () => { await result.current.refreshModelProviders(); });
+    expect(result.current.modelProviders).toEqual(providers);
+    expect(listModelProviders).toHaveBeenCalledTimes(2);
+  });
+
   it("does not start Cloud Agents requests until authentication is enabled", async () => {
     const listAgents = vi.fn(); const listModelProviders = vi.fn();
     const client = { listAgents, listModelProviders } as unknown as CloudAgentsClient;

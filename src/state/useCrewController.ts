@@ -55,12 +55,17 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     }));
     setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next;
   }, [client]);
+  const refreshModelProviders = useCallback(async () => {
+    const catalog = await client.listModelProviders();
+    setModelProviders(catalog.providers); setOrganizationId(catalog.organizationId);
+    return catalog.providers;
+  }, [client]);
   useEffect(() => {
     if (!enabled) { setAgents([]); setModelProviders([]); setOrganizationId(""); setSelectedAgentId(""); setMessages([]); setActivities([]); setApprovals([]); setComputer(undefined); setConnection("disconnected"); setLoading(false); setError(undefined); return; }
     let alive = true; setLoading(true);
-    void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, catalog]) => { if (alive) { setModelProviders(catalog.providers); setOrganizationId(catalog.organizationId); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } });
+    void Promise.all([refreshAgents(), refreshModelProviders()]).then(() => { if (alive) { setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } });
     return () => { alive = false; };
-  }, [client, enabled, refreshAgents]);
+  }, [enabled, refreshAgents, refreshModelProviders]);
   useEffect(() => {
     if (!enabled) return;
     const refreshWhenActive = () => {
@@ -158,7 +163,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   }, [client, conversationId, enabled, liveAgentId, selectedAgent?.name, selectedAgentId]);
 
   return {
-    agents, modelProviders, organizationId, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
+    agents, modelProviders, organizationId, refreshModelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
     dismissError: () => setError(undefined),
     createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); snapshots.current.set(agent.id, { messages: [], approvals: [], cachedAt: 0 }); setLoadedAgentIds((current) => new Set(current).add(agent.id)); await refreshAgents(); setSelectedAgentId(agent.id); return agent; },
     updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },
