@@ -1,5 +1,5 @@
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderOption, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
+import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
 import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
@@ -95,10 +95,10 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: value.latest_reply?.updated_at ?? iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id, lastMessagePreview: value.latest_reply?.text };
   }
 
-  async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderOption[]> {
+  async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderCatalog> {
     void _signal;
-    const response = await this.request<{ model_providers: ModelProvider[] }>({ method: "GET", path: "/v1/model-providers" });
-    return response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined }));
+    const response = await this.request<{ organization_id: string; model_providers: ModelProvider[] }>({ method: "GET", path: "/v1/model-providers" });
+    return { organizationId: response.organization_id, providers: response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined })) };
   }
 
   async listAgents(_signal?: AbortSignal) {

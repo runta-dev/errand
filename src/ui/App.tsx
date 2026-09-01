@@ -148,7 +148,7 @@ export function App() {
     {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
-    {settingsOpen && <SettingsDialog providers={crew.modelProviders} accountName={userName} accountEmail={userEmail} onLogout={() => { setSettingsOpen(false); void logout(); }} onClose={() => setSettingsOpen(false)} />}
+    {settingsOpen && <SettingsDialog providers={crew.modelProviders} organizationId={crew.organizationId} accountName={userName} accountEmail={userEmail} onLogout={() => { setSettingsOpen(false); void logout(); }} onClose={() => setSettingsOpen(false)} />}
     <CommandPalette open={paletteOpen} agents={crew.agents} onClose={() => setPaletteOpen(false)} onSelectAgent={crew.setSelectedAgentId} onCreateAgent={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onComputer={() => setDetailsOpen(true)} />
   </div>;
 }

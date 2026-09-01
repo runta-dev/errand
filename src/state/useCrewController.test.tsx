@@ -22,7 +22,7 @@ describe("useCrewController", () => {
     const atlasConversation = new Promise<Parameters<typeof resolveAtlas>[0]>((resolve) => { resolveAtlas = resolve; });
     const listeners = new Map<string, (event: ConversationEvent) => void>();
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }],
       getConversation: async (id) => id === "conversation-atlas" ? atlasConversation : { conversation: { id, agentId: "scout", title: "Scout", updatedAt: new Date(0).toISOString() }, messages: [] },
@@ -46,7 +46,7 @@ describe("useCrewController", () => {
   it("restores a fresh per-agent snapshot without fetching the conversation again", async () => {
     const getConversation = vi.fn(async (id: string) => ({ conversation: { id, agentId: id.endsWith("atlas") ? "atlas" : "scout", title: id, updatedAt: new Date(0).toISOString() }, messages: [{ id: `${id}-message`, conversationId: id, role: "agent" as const, parts: [{ type: "text" as const, text: id.endsWith("atlas") ? "Atlas cached" : "Scout cached" }], createdAt: new Date(0).toISOString() }] }));
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation,
       sendMessage: async (input) => ({ id: "sent", conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date(0).toISOString() }), subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
@@ -66,7 +66,7 @@ describe("useCrewController", () => {
     const sendMessage = vi.fn(async () => pendingSend);
     const listeners = new Map<string, (event: ConversationEvent) => void>();
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: "Old server reply" }],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: "Old server reply" }],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation: async (id) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date(0).toISOString() }, messages: [] }),
       sendMessage, subscribeToConversationEvents: (id, listener) => { listeners.set(id, listener); return { unsubscribe: () => undefined }; }, listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
@@ -110,7 +110,7 @@ describe("useCrewController", () => {
   it("treats a newly created agent as a known empty conversation", async () => {
     let created = false;
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => created ? [agent("new-agent", "Atlas")] : [],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => created ? [agent("new-agent", "Atlas")] : [],
       getAgent: async (id) => agent(id, id), createAgent: async (input) => { created = true; return agent("new-agent", input.name); }, updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
     };
@@ -126,7 +126,7 @@ describe("useCrewController", () => {
     let rejectDelete!: (reason: Error) => void;
     const pendingDelete = new Promise<void>((_resolve, reject) => { rejectDelete = reject; });
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [agent("atlas", "Atlas"), agent("scout", "Scout")],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => pendingDelete, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
     };
@@ -146,7 +146,7 @@ describe("useCrewController", () => {
   it("keeps an accepted deletion tombstoned until the server list confirms removal", async () => {
     let serverAgents = [agent("atlas", "Atlas"), agent("scout", "Scout")];
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => serverAgents,
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => serverAgents,
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
     };
@@ -165,7 +165,7 @@ describe("useCrewController", () => {
     const server = { latestReply: undefined as string | undefined };
     const getConversation = vi.fn(async (id: string) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date().toISOString() }, messages: server.latestReply ? [{ id: "reply", conversationId: id, role: "agent" as const, parts: [{ type: "text" as const, text: server.latestReply }], createdAt: new Date().toISOString() }] : [] }));
     const client: CloudAgentsClient = {
-      listModelProviders: async () => [], listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: server.latestReply }],
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [{ ...agent("atlas", "Atlas"), lastMessagePreview: server.latestReply }],
       getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
       listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date().toISOString() }], getConversation, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test" }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test" }), reconnect: async () => undefined,
     };

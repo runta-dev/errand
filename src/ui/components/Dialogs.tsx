@@ -14,7 +14,7 @@ export function DeleteAgentDialog({ agent, onClose, onDelete }: { agent: Agent; 
   function remove() { onClose(); void onDelete().catch(() => undefined); }
   return <DialogShell title={`Delete ${agent.name}?`} onClose={onClose}><div className="delete-agent-copy"><p>This permanently removes the cloud agent and its runtime data.</p><strong>This action cannot be undone.</strong></div><div className="dialog-actions delete-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button destructive-button" onClick={remove}>Delete agent</button></div></DialogShell>;
 }
-export function SettingsDialog({ mode = "preferences", providers = [], accountName = "Runta account", accountEmail = "", onLogout, onClose }: { mode?: "connection" | "preferences"; providers?: ModelProviderOption[]; accountName?: string; accountEmail?: string; onLogout?(): void; onClose(): void }) {
+export function SettingsDialog({ mode = "preferences", providers = [], organizationId = "", accountName = "Runta account", accountEmail = "", onLogout, onClose }: { mode?: "connection" | "preferences"; providers?: ModelProviderOption[]; organizationId?: string; accountName?: string; accountEmail?: string; onLogout?(): void; onClose(): void }) {
   const [settings, setSettings] = useState<AppSettings>({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true });
   useEffect(() => { void window.runtaCrew?.settings.get().then(setSettings); }, []);
   async function save(event: FormEvent) {
@@ -29,10 +29,15 @@ export function SettingsDialog({ mode = "preferences", providers = [], accountNa
   </form></DialogShell>;
   const initials = accountName.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const persist = (next: AppSettings) => { setSettings(next); void window.runtaCrew?.settings.set(next); document.documentElement.dataset.theme = next.theme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : next.theme; };
+  const addModelProvider = () => {
+    if (!settings.dashboardUrl || !organizationId) return;
+    const url = new URL(`/org/${encodeURIComponent(organizationId)}/secrets/providers/new`, settings.dashboardUrl);
+    void window.runtaCrew?.openExternal(url.toString());
+  };
   return <div className="dialog-backdrop settings-backdrop" role="presentation"><section className="settings-window" role="dialog" aria-modal="true" aria-label="Settings">
     <main className="settings-content"><header><h2>Settings</h2><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button></header>
       <section><h3>Account</h3><div className="settings-card account-card"><span className="settings-account-avatar">{initials}</span><span className="settings-account-copy"><strong>{accountName}</strong>{accountEmail && <small>{accountEmail}</small>}</span>{onLogout && <button className="settings-signout" onClick={onLogout}>Sign out</button>}</div></section>
-      <section><h3>Agents</h3><div className="settings-card"><div className="settings-row"><span>Model provider</span><Select ariaLabel="Model provider" placeholder="Select a provider" value={settings.modelProviderId ?? ""} options={providers.map((provider) => ({ value: provider.id, label: provider.name }))} onChange={(modelProviderId) => persist({ ...settings, modelProviderId })} /></div></div></section>
+      <section><h3>Agents</h3><div className="settings-card"><div className="settings-row"><span>Model provider</span><Select ariaLabel="Model provider" placeholder="Select a provider" value={settings.modelProviderId ?? ""} options={providers.length ? providers.map((provider) => ({ value: provider.id, label: provider.name })) : [{ value: "add-model-provider", label: "Add model provider", action: addModelProvider }]} onChange={(modelProviderId) => persist({ ...settings, modelProviderId })} /></div></div></section>
       <section><h3>Appearance</h3><div className="settings-card"><div className="settings-row"><span>Theme</span><Select ariaLabel="Theme" value={settings.theme} options={[{ value: "system", label: "Follow System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} onChange={(theme) => persist({ ...settings, theme: theme as ThemePreference })} /></div><label className="settings-row"><span>Notifications</span><input className="settings-toggle" type="checkbox" checked={settings.notifications} onChange={(event) => persist({ ...settings, notifications: event.target.checked })} /></label></div></section>
     </main>
   </section></div>;

@@ -27,6 +27,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   const [messages, setMessages] = useState<Message[]>([]); const [activities, setActivities] = useState<ActivityEvent[]>([]); const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [computer, setComputer] = useState<CloudComputer>(); const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [modelProviders, setModelProviders] = useState<ModelProviderOption[]>([]);
+  const [organizationId, setOrganizationId] = useState("");
   const [loading, setLoading] = useState(enabled); const [error, setError] = useState<string>();
   const [loadedAgentIds, setLoadedAgentIds] = useState<ReadonlySet<string>>(() => new Set());
   const [liveAgentId, setLiveAgentId] = useState(""); const [revalidateVersion, setRevalidateVersion] = useState(0);
@@ -55,9 +56,9 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next;
   }, [client]);
   useEffect(() => {
-    if (!enabled) { setAgents([]); setModelProviders([]); setSelectedAgentId(""); setMessages([]); setActivities([]); setApprovals([]); setComputer(undefined); setConnection("disconnected"); setLoading(false); setError(undefined); return; }
+    if (!enabled) { setAgents([]); setModelProviders([]); setOrganizationId(""); setSelectedAgentId(""); setMessages([]); setActivities([]); setApprovals([]); setComputer(undefined); setConnection("disconnected"); setLoading(false); setError(undefined); return; }
     let alive = true; setLoading(true);
-    void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, providers]) => { if (alive) { setModelProviders(providers); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } });
+    void Promise.all([refreshAgents(), client.listModelProviders()]).then(([, catalog]) => { if (alive) { setModelProviders(catalog.providers); setOrganizationId(catalog.organizationId); setConnection("connected"); setLoading(false); } }).catch((reason: unknown) => { if (alive) { setConnection("error"); setError(reason instanceof Error ? reason.message : "Could not load agents"); setLoading(false); } });
     return () => { alive = false; };
   }, [client, enabled, refreshAgents]);
   useEffect(() => {
@@ -157,7 +158,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   }, [client, conversationId, enabled, liveAgentId, selectedAgent?.name, selectedAgentId]);
 
   return {
-    agents, modelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
+    agents, modelProviders, organizationId, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
     dismissError: () => setError(undefined),
     createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); snapshots.current.set(agent.id, { messages: [], approvals: [], cachedAt: 0 }); setLoadedAgentIds((current) => new Set(current).add(agent.id)); await refreshAgents(); setSelectedAgentId(agent.id); return agent; },
     updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },

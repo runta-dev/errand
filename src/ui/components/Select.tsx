@@ -2,7 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export interface SelectOption { value: string; label: string; disabled?: boolean }
+export interface SelectOption { value: string; label: string; disabled?: boolean; action?: () => void }
 
 export function Select({ value, options, ariaLabel, placeholder = "Select", onChange }: { value: string; options: SelectOption[]; ariaLabel: string; placeholder?: string; onChange(value: string): void }) {
   const [open, setOpen] = useState(false); const [menuStyle, setMenuStyle] = useState<React.CSSProperties>(); const root = useRef<HTMLDivElement>(null); const menu = useRef<HTMLDivElement>(null);
@@ -19,7 +19,7 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
   }, [open, options.length]);
   const move = (direction: 1 | -1) => {
-    const available = options.filter((option) => !option.disabled); if (!available.length) return;
+    const available = options.filter((option) => !option.disabled && !option.action); if (!available.length) return;
     const current = available.findIndex((option) => option.value === value);
     const next = current < 0 ? (direction > 0 ? 0 : available.length - 1) : (current + direction + available.length) % available.length;
     onChange(available[next]!.value);
@@ -30,6 +30,6 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
       if (event.key === "Escape") { setOpen(false); return; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(event.key === "ArrowDown" ? 1 : -1); setOpen(true); }
     }}><span>{selected?.label ?? placeholder}</span><span className="crew-select-chevron"><ChevronDown size={15} /></span></button>
-    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}><span className="crew-select-check">{option.value === value && <Check size={14} />}</span><span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
+    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}><span className="crew-select-check">{!option.action && option.value === value && <Check size={14} />}</span><span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
   </div>;
 }
