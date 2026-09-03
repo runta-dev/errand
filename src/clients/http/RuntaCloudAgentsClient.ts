@@ -136,7 +136,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       await new Promise<void>((resolve) => window.setTimeout(resolve, AGENT_READY_POLL_MS));
     }
   }
-  async waitForInitialReply(agentId: string, signal?: AbortSignal): Promise<void> {
+  async waitForInitialReply(agentId: string, signal?: AbortSignal): Promise<Message[]> {
     const deadline = Date.now() + 3 * 60_000;
     for (;;) {
       if (signal?.aborted) throw new DOMException("Agent creation was cancelled", "AbortError");
@@ -144,7 +144,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       const run = runs[0];
       if (run && terminalRunStatuses.has(run.status)) {
         if (run.status !== "finished") throw new CrewError("unknown", run.error?.trim() || "The Agent introduction failed", true);
-        if (run.result?.trim()) return;
+        if (run.result?.trim()) return runMessages(run, conversationId(agentId)).filter((message) => message.role === "agent");
       }
       if (Date.now() >= deadline) throw new CrewError("network", "The Agent introduction is still pending", true);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 250));

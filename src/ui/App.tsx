@@ -161,8 +161,8 @@ export function App() {
       }
       const agent = await crew.createAgent({ name, modelProviderId: provider.id });
       setCreatingAgentPhase("typing");
-      await client.waitForInitialReply(agent.id);
-      crew.setSelectedAgentId(agent.id);
+      const greeting = await client.waitForInitialReply(agent.id);
+      crew.focusAgentWithMessages(agent.id, greeting);
       setComposerFocusRequest((current) => current + 1);
     }
     catch (reason) { setAuthError(reason instanceof Error ? reason.message : "Could not create the agent."); }

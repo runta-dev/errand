@@ -129,7 +129,7 @@ describe("useCrewController", () => {
     expect(result.current.agents[0]?.lastMessagePreview).toBe("I'm Atlas, ready to help.");
   });
 
-  it("treats a newly created agent as a known empty conversation", async () => {
+  it("focuses a newly created agent with its greeting already hydrated", async () => {
     let created = false;
     const client: CloudAgentsClient = {
       listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => created ? [agent("new-agent", "Atlas")] : [],
@@ -142,6 +142,11 @@ describe("useCrewController", () => {
     expect(result.current.selectedAgentId).toBe("");
     expect(result.current.conversationLoading).toBe(false);
     expect(result.current.messages).toEqual([]);
+    const greeting: Message = { id: "greeting", conversationId: "conversation-new-agent", role: "agent", parts: [{ type: "text", text: "I am Atlas." }], createdAt: new Date().toISOString() };
+    act(() => result.current.focusAgentWithMessages("new-agent", [greeting]));
+    expect(result.current.selectedAgentId).toBe("new-agent");
+    expect(result.current.conversationLoading).toBe(false);
+    expect(result.current.messages).toEqual([greeting]);
   });
 
   it("removes a deleted agent immediately and rolls back when deletion fails", async () => {
