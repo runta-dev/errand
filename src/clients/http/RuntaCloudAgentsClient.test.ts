@@ -50,11 +50,11 @@ describe("RuntaCloudAgentsClient", () => {
     const events: ConversationEvent[] = [];
     const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledWith("/v2/agents/agent-1/runs/run-1/events?after=-1", expect.any(Function)));
-    streamListener?.({ event: "acp.event", id: "4", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-1", content: { text: "Checking." } } } } });
-    streamListener?.({ event: "acp.event", id: "5", data: { params: { update: { sessionUpdate: "tool_call", toolCallId: "tool-1", title: "Read", kind: "read", status: "in_progress" } } } });
-    streamListener?.({ event: "acp.event", id: "6", data: { params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tool-1", title: "Read", kind: "read", status: "completed" } } } });
-    streamListener?.({ event: "acp.event", id: "7", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: "Hi" } } } } });
-    streamListener?.({ event: "acp.event", id: "8", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: " there" } } } } });
+    streamListener?.({ event: "pi.event", id: "4", data: { type: "message_update", message: { id: "assistant-1" }, assistantMessageEvent: { type: "text_delta", delta: "Checking." } } });
+    streamListener?.({ event: "pi.event", id: "5", data: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" } } });
+    streamListener?.({ event: "pi.event", id: "6", data: { type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" }, isError: false } });
+    streamListener?.({ event: "pi.event", id: "7", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: "Hi" } } });
+    streamListener?.({ event: "pi.event", id: "8", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: " there" } } });
     streamListener?.({ event: "run.status", id: "status:finished", data: { id: "run-1", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "Hi there", error: null } });
     expect(events).toContainEqual({ type: "message.created", message: expect.objectContaining({ id: "run-1:agent:assistant-1", parts: [{ type: "text", text: "Checking." }], streaming: true }) });
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-1", notify: false });
@@ -135,10 +135,10 @@ describe("RuntaCloudAgentsClient", () => {
     const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => {
       queueMicrotask(() => {
         listener({ event: "run.status", data: { status: "finished" } });
-        listener({ event: "acp.event", id: "1", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-1", content: { text: "Checking." } } } } });
-        listener({ event: "acp.event", id: "2", data: { params: { update: { sessionUpdate: "tool_call", toolCallId: "tool-1" } } } });
-        listener({ event: "acp.event", id: "3", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: "Done" } } } } });
-        listener({ event: "acp.event", id: "4", data: { params: { update: { sessionUpdate: "agent_message_chunk", messageId: "assistant-2", content: { text: " now." } } } } });
+        listener({ event: "pi.event", id: "1", data: { type: "message_update", message: { id: "assistant-1" }, assistantMessageEvent: { type: "text_delta", delta: "Checking." } } });
+        listener({ event: "pi.event", id: "2", data: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" } } });
+        listener({ event: "pi.event", id: "3", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: "Done" } } });
+        listener({ event: "pi.event", id: "4", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: " now." } } });
         listener({ event: "stream.closed" });
       });
       return () => undefined;

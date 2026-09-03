@@ -1,4 +1,4 @@
-import { LoaderCircle, LogIn, LogOut, MessageCircle, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2 } from "lucide-react";
+import { LogIn, LogOut, MessageCircle, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { Agent } from "@/domain/types";
 import { AgentAvatar } from "./AgentAvatar";
@@ -28,12 +28,12 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, creat
     <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" disabled={Boolean(creatingAgentName)} onClick={onCreate}><Plus size={18} /></button></div>
     <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your crew" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
     <div className="agent-list">
-      {creatingAgentName && <div className="agent-row agent-creating" role="status" aria-live="polite" aria-label={`${creatingAgentName} ${creatingAgentPhase === "typing" ? "is typing" : "is being created"}`}>
+      {creatingAgentName && <div className={`agent-row agent-creating ${creatingAgentPhase === "typing" ? "is-typing" : "is-creating"}`} role="status" aria-live="polite" aria-label={`${creatingAgentName} ${creatingAgentPhase === "typing" ? "is typing" : "is being created"}`}>
         <div className="agent-select">
           <AgentAvatar agent={{ id: `creating-${creatingAgentName}`, name: creatingAgentName }} />
           <span className="agent-copy"><strong><span>{creatingAgentName}</span></strong>{creatingAgentPhase === "typing"
             ? <span className="typing-indicator" aria-hidden="true"><i /><i /><i /></span>
-            : <span className="creating-indicator" aria-hidden="true"><LoaderCircle size={13} /><span>Creating</span></span>}</span>
+            : <span className="agent-preview">Creating…</span>}</span>
         </div>
       </div>}
       {!creatingAgentName && visibleAgents.length === 0 && <div className="agent-list-empty">

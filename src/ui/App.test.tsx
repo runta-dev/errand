@@ -78,7 +78,7 @@ describe("Runta Crew authentication surfaces", () => {
 
   it("shows immediate feedback while an agent is being created", () => {
     const { rerender } = render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
-    expect(screen.getByRole("status", { name: "Atlas is being created" })).toHaveTextContent("AtlasCreating");
+    expect(screen.getByRole("status", { name: "Atlas is being created" })).toHaveTextContent("AtlasCreating…");
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
     rerender(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" creatingAgentPhase="typing" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
     expect(screen.getByRole("status", { name: "Atlas is typing" })).toBeInTheDocument();
@@ -91,11 +91,11 @@ describe("Runta Crew authentication surfaces", () => {
     const { rerender } = render(<AgentList {...props} agents={[existing, created]} creatingAgentName="Scout" creatingAgentBaselineIds={new Set([existing.id])} />);
 
     expect(screen.getAllByText("Scout")).toHaveLength(2);
-    expect(screen.getByText("Creating")).toBeInTheDocument();
+    expect(screen.getByText("Creating…")).toBeInTheDocument();
 
     rerender(<AgentList {...props} agents={[existing, created]} />);
     expect(screen.getAllByText("Scout")).toHaveLength(2);
-    expect(screen.queryByText("Creating")).not.toBeInTheDocument();
+    expect(screen.queryByText("Creating…")).not.toBeInTheDocument();
   });
 
   it("distinguishes an empty crew from an empty search result", () => {

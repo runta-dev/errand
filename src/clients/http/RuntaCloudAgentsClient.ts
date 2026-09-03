@@ -41,18 +41,6 @@ function toolActivityTitle(value: string): string {
   if (/agent|task|handoff/.test(normalized)) return "Running agent";
   return value.trim() || "Working";
 }
-function activityFromToolUpdate(update: Record<string, unknown>, conversationIdValue: string, previous?: ActivityEvent): ActivityEvent | undefined {
-  if (typeof update.sessionUpdate !== "string" || !/tool[_-]?call(?:[_-]?update)?/i.test(update.sessionUpdate)) return undefined;
-  const id = stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id);
-  if (!id) return undefined;
-  const rawTitle = stringValue(update.title) ?? stringValue(update.name) ?? stringValue(update.kind);
-  const detail = stringValue(update.description) ?? stringValue(update.detail) ?? rawTitle ?? previous?.detail ?? "Working";
-  const rawStatus = stringValue(update.status)?.toLowerCase() ?? previous?.status ?? "running";
-  const status: ActivityEvent["status"] = /fail|error/.test(rawStatus) ? "failed" : /complete|finish|done/.test(rawStatus) ? "completed" : "running";
-  const timestamp = new Date().toISOString();
-  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: rawTitle ? toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`) : previous?.kind ?? "status", title: rawTitle ? toolActivityTitle(rawTitle) : previous?.title ?? "Working", detail, status, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp };
-}
-
 function runMessages(run: RuntaRun, id: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
   const updatedAt = run.updated_at ?? createdAt;
@@ -65,11 +53,21 @@ function runMessages(run: RuntaRun, id: string): Message[] {
 }
 
 function assistantChunk(event: CloudStreamEvent): { sourceId: string; text: string } | undefined {
-  if (event.event !== "acp.event" || !event.data || typeof event.data !== "object") return undefined;
-  const payload = event.data as { params?: { update?: { sessionUpdate?: string; messageId?: string; content?: { text?: string } } } };
-  const update = payload.params?.update;
-  if (update?.sessionUpdate !== "agent_message_chunk" || typeof update.content?.text !== "string" || !update.content.text) return undefined;
-  return { sourceId: stringValue(update.messageId) ?? "legacy", text: update.content.text };
+  if (event.event !== "pi.event" || !event.data || typeof event.data !== "object") return undefined;
+  const payload = event.data as { type?: string; message?: { id?: string }; assistantMessageEvent?: { type?: string; delta?: string } };
+  if (payload.type !== "message_update" || payload.assistantMessageEvent?.type !== "text_delta" || !payload.assistantMessageEvent.delta) return undefined;
+  return { sourceId: stringValue(payload.message?.id) ?? "active", text: payload.assistantMessageEvent.delta };
+}
+function activityFromPiEvent(value: Record<string, unknown>, conversationIdValue: string, previous?: ActivityEvent): ActivityEvent | undefined {
+  if (!/^tool_execution_(?:start|update|end)$/.test(String(value.type ?? ""))) return undefined;
+  const id = stringValue(value.toolCallId); if (!id) return undefined;
+  const name = stringValue(value.toolName) ?? previous?.detail ?? "Tool";
+  const args = value.args && typeof value.args === "object" ? value.args as Record<string, unknown> : {};
+  const subject = stringValue(args.path) ?? stringValue(args.file_path) ?? (name === "bash" ? stringValue(args.command) : undefined);
+  const rawTitle = subject ? `${name === "bash" ? "" : `${name} `}${subject}` : name;
+  const title = toolActivityTitle(rawTitle.slice(0, 160)); const timestamp = new Date().toISOString();
+  const status: ActivityEvent["status"] = value.type === "tool_execution_end" ? value.isError === true ? "failed" : "completed" : "running";
+  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(name), title, detail: rawTitle, status, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp };
 }
 
 async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
@@ -198,9 +196,9 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       signal?.addEventListener("abort", finish, { once: true });
       unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
         if (event.event === "stream.closed" || event.event === "error") { finish(); return; }
-        if (event.event === "acp.event" && event.data && typeof event.data === "object") {
-          const payload = event.data as { params?: { update?: { sessionUpdate?: string } } };
-          if (payload.params?.update?.sessionUpdate === "tool_call") { current = undefined; return; }
+        if (event.event === "pi.event" && event.data && typeof event.data === "object") {
+          const payload = event.data as { type?: string };
+          if (payload.type === "tool_execution_start") { current = undefined; return; }
         }
         const chunk = assistantChunk(event);
         if (!chunk) return;
@@ -276,9 +274,8 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
           }
           return;
         }
-        if (event.event !== "acp.event" || terminal || !event.data || typeof event.data !== "object") return;
-        const payload = event.data as { params?: { update?: Record<string, unknown> & { sessionUpdate?: string; messageId?: string; content?: { text?: string } } } };
-        const update = payload.params?.update;
+        if (event.event !== "pi.event" || terminal || !event.data || typeof event.data !== "object") return;
+        const update = event.data as Record<string, unknown>;
         const chunk = assistantChunk(event);
         if (chunk) {
           const sourceId = chunk.sourceId;
@@ -293,9 +290,9 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
             listener({ type: "message.delta", messageId, delta: chunk.text });
           }
         }
-        if (update?.sessionUpdate === "tool_call") completeCurrentAssistant();
-        const activityId = update ? stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id) : undefined;
-        const activity = update ? activityFromToolUpdate(update, id, activityId ? toolActivities.get(`tool:${activityId}`) : undefined) : undefined;
+        if (update.type === "tool_execution_start") completeCurrentAssistant();
+        const activityId = stringValue(update.toolCallId);
+        const activity = activityFromPiEvent(update, id, activityId ? toolActivities.get(`tool:${activityId}`) : undefined);
         if (activity) { toolActivities.set(activity.id, activity); listener({ type: "activity.updated", activity }); }
       });
       streams.set(run.id, unsubscribe);
