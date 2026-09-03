@@ -33,16 +33,16 @@ function toolActivityTitle(value: string): string {
   if (/agent|task|handoff/.test(normalized)) return "Running agent";
   return value.trim() || "Working";
 }
-function activityFromToolUpdate(update: Record<string, unknown>, conversationIdValue: string): ActivityEvent | undefined {
+function activityFromToolUpdate(update: Record<string, unknown>, conversationIdValue: string, previous?: ActivityEvent): ActivityEvent | undefined {
   if (typeof update.sessionUpdate !== "string" || !/tool[_-]?call(?:[_-]?update)?/i.test(update.sessionUpdate)) return undefined;
   const id = stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id);
   if (!id) return undefined;
-  const rawTitle = stringValue(update.title) ?? stringValue(update.name) ?? stringValue(update.kind) ?? "Working";
-  const detail = stringValue(update.description) ?? stringValue(update.detail) ?? rawTitle;
-  const rawStatus = stringValue(update.status)?.toLowerCase() ?? "running";
+  const rawTitle = stringValue(update.title) ?? stringValue(update.name) ?? stringValue(update.kind);
+  const detail = stringValue(update.description) ?? stringValue(update.detail) ?? rawTitle ?? previous?.detail ?? "Working";
+  const rawStatus = stringValue(update.status)?.toLowerCase() ?? previous?.status ?? "running";
   const status: ActivityEvent["status"] = /fail|error/.test(rawStatus) ? "failed" : /complete|finish|done/.test(rawStatus) ? "completed" : "running";
   const timestamp = new Date().toISOString();
-  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`), title: toolActivityTitle(rawTitle), detail, status, createdAt: timestamp, updatedAt: timestamp };
+  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: rawTitle ? toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`) : previous?.kind ?? "status", title: rawTitle ? toolActivityTitle(rawTitle) : previous?.title ?? "Working", detail, status, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp };
 }
 
 function runMessages(run: RuntaRun, id: string): Message[] {
@@ -219,6 +219,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       if (!bridge?.subscribe || streams.has(run.id) || terminalRunStatuses.has(run.status)) return;
       let terminal = false;
       const assistant = { seen: new Set<string>() } as { current?: string; seen: Set<string> };
+      const toolActivities = new Map<string, ActivityEvent>();
       assistantStreams.set(run.id, assistant);
       const completeCurrentAssistant = (notify = false) => {
         if (!assistant.current) return;
@@ -257,8 +258,9 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
           }
         }
         if (update?.sessionUpdate === "tool_call") completeCurrentAssistant();
-        const activity = update ? activityFromToolUpdate(update, id) : undefined;
-        if (activity) listener({ type: "activity.updated", activity });
+        const activityId = update ? stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id) : undefined;
+        const activity = update ? activityFromToolUpdate(update, id, activityId ? toolActivities.get(`tool:${activityId}`) : undefined) : undefined;
+        if (activity) { toolActivities.set(activity.id, activity); listener({ type: "activity.updated", activity }); }
       });
       streams.set(run.id, unsubscribe);
     };

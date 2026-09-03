@@ -121,7 +121,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
           if (!knownVisualId && event.message.role === "agent") {
             const canonicalRunMessageId = event.message.id.replace(/:agent:.+$/, ":agent");
             const canonicalVisualId = canonicalRunMessageId === event.message.id ? undefined : visualMessageIds.current.get(canonicalRunMessageId);
-            if (canonicalVisualId && current.some((message) => message.id === canonicalVisualId)) {
+            if (canonicalVisualId) {
               knownVisualId = canonicalVisualId;
               visualMessageIds.current.set(event.message.id, canonicalVisualId);
             }
