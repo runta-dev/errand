@@ -147,6 +147,7 @@ describe("useCrewController", () => {
     expect(result.current.selectedAgentId).toBe("new-agent");
     expect(result.current.conversationLoading).toBe(false);
     expect(result.current.messages).toEqual([greeting]);
+    expect(result.current.agents.find((item) => item.id === "new-agent")?.lastMessagePreview).toBe("I am Atlas.");
   });
 
   it("removes a deleted agent immediately and rolls back when deletion fails", async () => {

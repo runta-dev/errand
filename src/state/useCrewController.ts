@@ -181,7 +181,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
 
   return {
     agents, modelProviders, organizationId, refreshModelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
-    focusAgentWithMessages: (agentId: string, initialMessages: Message[]) => { snapshots.current.set(agentId, { messages: initialMessages, approvals: [], cachedAt: Date.now() }); setLoadedAgentIds((current) => new Set(current).add(agentId)); setSelectedAgentId(agentId); },
+    focusAgentWithMessages: (agentId: string, initialMessages: Message[]) => { const preview = latestCompletedAgentPreview(initialMessages); snapshots.current.set(agentId, { messages: initialMessages, approvals: [], cachedAt: Date.now() }); setLoadedAgentIds((current) => new Set(current).add(agentId)); if (preview) setAgents((current) => current.map((agent) => agent.id === agentId ? { ...agent, lastMessagePreview: preview } : agent)); setSelectedAgentId(agentId); },
     dismissError: () => setError(undefined),
     createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); await refreshAgents(true); return agent; },
     updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },
