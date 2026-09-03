@@ -114,8 +114,11 @@ describe("useCrewController", () => {
     act(() => listeners.get("conversation-atlas")?.({ type: "message.delta", messageId: "run-1:agent:second", delta: "Final answer after the tool" }));
     expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Final answer after the tool" }], streaming: true });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "stale-working", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date(0).toISOString(), streaming: true } }));
+    expect(result.current.messages.filter((message) => message.role === "agent" && message.streaming)).toHaveLength(2);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent:second", notify: true }));
     expect(result.current.messages[1]).toMatchObject({ streaming: false });
+    expect(result.current.messages.filter((message) => message.role === "agent" && message.streaming)).toEqual([]);
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Final answer after the tool");
   });
 
