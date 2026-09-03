@@ -146,6 +146,17 @@ describe("Conversation states", () => {
     expect(container.querySelector(".message-body")).not.toBeInTheDocument();
   });
 
+  it("keeps the latest completed work detail visible while the run continues", () => {
+    const message: Message = { id: "run-3:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
+    render(<MessageView message={message} activities={[
+      { id: "tool:old", conversationId: message.conversationId, kind: "terminal", title: "Installing Chromium", detail: "Install", status: "completed", createdAt: new Date(0).toISOString() },
+      { id: "tool:other", conversationId: "conversation-other", kind: "browser", title: "Browsing web", detail: "Browse", status: "running", createdAt: new Date(1).toISOString() },
+    ]} />);
+
+    expect(screen.getByRole("status", { name: "Agent is working: Installing Chromium" })).toBeInTheDocument();
+    expect(screen.queryByText("Browsing web")).not.toBeInTheDocument();
+  });
+
   it("animates a user entry and the final agent response at their actual state transitions", () => {
     const animate = vi.fn(); const originalAnimate = HTMLElement.prototype.animate;
     Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });

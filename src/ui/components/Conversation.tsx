@@ -26,7 +26,9 @@ export function MessageView({ message, agent, activities, entering = false }: { 
   const text = textOf(message);
   const rootRef = useRef<HTMLDivElement>(null); const entryAnimated = useRef(false); const previousStreaming = useRef(Boolean(message.streaming));
   const relevant = message.parts.flatMap((part) => part.type === "activity" ? activities.filter((activity) => activity.id === part.activityId) : []);
-  const activeActivity = [...activities].reverse().find((activity) => activity.status === "running");
+  const conversationActivities = activities.filter((activity) => activity.conversationId === message.conversationId);
+  const latestActivity = conversationActivities.at(-1);
+  const activeActivity = [...conversationActivities].reverse().find((activity) => activity.status === "running") ?? latestActivity;
   const agentWorking = message.role === "agent" && Boolean(message.streaming);
   const workingLabel = text.trim() || activeActivity?.title || "Working";
   const attachments = message.parts.flatMap((part) => part.type === "attachment" ? [part.attachment] : []);
