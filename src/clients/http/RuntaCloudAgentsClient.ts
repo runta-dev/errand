@@ -204,9 +204,11 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async sendMessage(input: SendMessageInput): Promise<Message> {
     if (input.attachments?.length) throw new CrewError("contract_pending", "Cloud attachment upload is not available yet");
     const agentId = agentIdFromConversation(input.conversationId);
-    const run = await this.request<RuntaRun>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
+    const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=1` });
+    const latest = runs[0];
+    const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
     for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();
-    return { id: `${run.id}:user`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
+    return { id: `${run.id}:user:${crypto.randomUUID()}`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
   }
   subscribeToConversationEvents(id: string, listener: (event: ConversationEvent) => void): Subscription {
     const agentId = agentIdFromConversation(id);

@@ -78,6 +78,8 @@ describe("RuntaCloudAgentsClient", () => {
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
     await client.sendMessage({ conversationId: "conversation-agent-1", text: "Start" });
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledWith("/v2/agents/agent-1/runs/run-new/events?after=-1", expect.any(Function)));
+    await client.sendMessage({ conversationId: "conversation-agent-1", text: "Steer" });
+    expect(request).toHaveBeenCalledWith({ method: "POST", path: "/v2/agents/agent-1/runs/run-new/follow-ups", body: { prompt: "Steer" } });
     subscription.unsubscribe();
   });
 
