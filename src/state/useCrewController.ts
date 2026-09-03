@@ -213,14 +213,16 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       const optimisticUser: Message = { id: optimisticUserId, conversationId: targetConversationId, role: "user", parts: [...(text ? [{ type: "text" as const, text }] : []), ...attachments.map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt };
       const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
       const snapshot = snapshots.current.get(targetAgentId) ?? { messages: [], approvals: [], cachedAt: Date.now() };
-      const optimisticMessages = [...snapshot.messages, optimisticUser, optimisticAgent];
+      const existingWorking = [...snapshot.messages].reverse().find((message) => message.role === "agent" && message.streaming);
+      const optimisticMessages = [...snapshot.messages, optimisticUser, ...(existingWorking ? [] : [optimisticAgent])];
       if (selectedAgentIdRef.current === targetAgentId) setActivities([]);
       snapshots.current.set(targetAgentId, { ...snapshot, messages: optimisticMessages, cachedAt: Date.now() });
       if (selectedAgentIdRef.current === targetAgentId) { setMessages(optimisticMessages); setLiveAgentId(targetAgentId); }
       try {
         const message = await client.sendMessage({ conversationId: targetConversationId, text, attachments });
         visualMessageIds.current.set(message.id, optimisticUserId);
-        if (message.id.endsWith(":user")) visualMessageIds.current.set(`${message.id.slice(0, -":user".length)}:agent`, optimisticAgentId);
+        const runId = message.id.match(/^(.+):user(?:$|:)/)?.[1];
+        if (runId) visualMessageIds.current.set(`${runId}:agent`, existingWorking?.id ?? optimisticAgentId);
         const latest = snapshots.current.get(targetAgentId) ?? snapshot;
         const visualMessage = { ...message, id: optimisticUserId };
         const reconciled = latest.messages.map((item) => item.id === optimisticUserId ? visualMessage : item).filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
