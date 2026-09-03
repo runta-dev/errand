@@ -47,6 +47,7 @@ export function MessageView({ message, agent, activities, entering = false }: { 
     previousStreaming.current = Boolean(message.streaming);
   }, [entering, message.role, message.streaming]);
   return <div className={`message ${message.role} ${entering ? "message-entering" : ""}`} ref={rootRef}>
+    {message.interrupted && <div className="agent-interrupted">Interrupted</div>}
     {message.role === "user" && attachments.length > 0 && <div className="message-attachments"><AttachmentCards attachments={attachments} /></div>}
     {!agentWorking && (text || message.streaming) && <div className="message-body" onClick={message.role === "agent" ? openExternalLink : undefined}>{message.role === "agent" ? <Suspense fallback={<span className="agent-markdown-fallback">{text}</span>}><Streamdown className="agent-markdown" mode={message.streaming ? "streaming" : "static"} parseIncompleteMarkdown={message.streaming} animated={message.streaming} controls={{ code: { copy: true, download: false }, table: false, image: false }} tableMaxHeight="none" linkSafety={{ enabled: false }} skipHtml>{text}</Streamdown></Suspense> : text}</div>}
     {agentWorking && <WorkingActivity agent={agent} label={workingLabel} activities={conversationActivities} startedAt={message.createdAt} />}

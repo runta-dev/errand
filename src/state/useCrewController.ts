@@ -219,7 +219,8 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
       const snapshot = snapshots.current.get(targetAgentId) ?? { messages: [], approvals: [], cachedAt: Date.now() };
       const existingWorking = [...snapshot.messages].reverse().find((message) => message.role === "agent" && message.streaming);
-      const optimisticMessages = [...snapshot.messages, optimisticUser, ...(existingWorking ? [] : [optimisticAgent])];
+      const interruptedMessages = existingWorking ? snapshot.messages.map((message) => message.id === existingWorking.id ? { ...message, streaming: false, interrupted: true } : message) : snapshot.messages;
+      const optimisticMessages = [...interruptedMessages, optimisticUser, optimisticAgent];
       if (selectedAgentIdRef.current === targetAgentId) setActivities([]);
       snapshots.current.set(targetAgentId, { ...snapshot, messages: optimisticMessages, cachedAt: Date.now() });
       if (selectedAgentIdRef.current === targetAgentId) { setMessages(optimisticMessages); setLiveAgentId(targetAgentId); }
@@ -242,7 +243,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         const retained = withoutEmptyAgent.some((message) => message.id === optimisticUserId) ? withoutEmptyAgent : [...withoutEmptyAgent, optimisticUser];
         snapshots.current.set(targetAgentId, { ...latest, messages: retained, cachedAt: Date.now() });
         if (selectedAgentIdRef.current === targetAgentId) setMessages(retained);
-        setError(reason instanceof Error ? reason.message : "Could not send message");
+        if (!existingWorking) setError(reason instanceof Error ? reason.message : "Could not send message");
         throw reason;
       } finally {
         const pending = (sendingAgentRequests.current.get(targetAgentId) ?? 1) - 1;

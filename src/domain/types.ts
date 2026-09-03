@@ -11,7 +11,7 @@ export interface ActivityPart { type: "activity"; activityId: string }
 export interface Attachment { id: string; name: string; size: number; mediaType: string; source: "local-selection" | "cloud"; agentId?: string }
 export interface AttachmentPart { type: "attachment"; attachment: Attachment }
 export type MessagePart = TextPart | ActivityPart | AttachmentPart;
-export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean }
+export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean; interrupted?: boolean }
 export interface Conversation { id: string; agentId: string; title: string; updatedAt: string }
 export type ActivityStatus = "running" | "completed" | "failed";
 export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; output?: string; status: ActivityStatus; createdAt: string; updatedAt?: string }

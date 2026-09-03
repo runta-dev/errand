@@ -168,6 +168,13 @@ describe("Conversation states", () => {
     expect(container.querySelector(".streaming-caret")).not.toBeInTheDocument();
   });
 
+  it("shows an interrupted marker when a newer user message supersedes active work", () => {
+    const message: Message = { id: "interrupted", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: false, interrupted: true };
+    render(<MessageView message={message} activities={[]} />);
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+    expect(screen.queryByText(/Working for/)).not.toBeInTheDocument();
+  });
+
   it("shows the latest progress message directly on the working row", () => {
     const message: Message = { id: "run-2:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking now" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
