@@ -251,6 +251,14 @@ ipcMain.handle("attachments:choose", async () => {
   if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB." });
   return attachments;
 });
+ipcMain.handle("attachments:read", (_event, id: unknown) => {
+  if (typeof id !== "string") throw new Error("Attachment ID is invalid");
+  const path = selectedAttachmentPaths.get(id);
+  if (!path || !existsSync(path)) throw new Error("Attachment is no longer available");
+  const size = statSync(path).size;
+  if (size > 25 * 1024 * 1024) throw new Error("Attachment exceeds 25 MB");
+  return { name: basename(path), mediaType: mediaTypeForPath(path), base64: readFileSync(path).toString("base64") };
+});
 ipcMain.handle("notifications:show", (event, value: { title?: unknown; body?: unknown }) => {
   const title = typeof value?.title === "string" ? value.title.slice(0, 120) : "";
   const body = typeof value?.body === "string" ? value.body.slice(0, 500) : "";
