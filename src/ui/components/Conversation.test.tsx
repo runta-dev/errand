@@ -210,6 +210,17 @@ describe("Conversation states", () => {
     expect(await screen.findByRole("dialog", { name: "Preview report.txt" })).toHaveTextContent("hello preview");
   });
 
+  it("renders user images above the text bubble", () => {
+    window.runtaCrew = { attachments: { choose: async () => [], addImage: async () => ({ id: "unused", name: "unused.png", size: 3, mediaType: "image/png" }), read: async () => ({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }) } } as unknown as typeof window.runtaCrew;
+    const message: Message = { id: "user-with-image", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "What is this?" }, { type: "attachment", attachment: { id: "image-1", name: "pasted.png", size: 3, mediaType: "image/png", source: "local-selection" } }], createdAt: new Date().toISOString() };
+    const { container } = render(<MessageView message={message} activities={[]} />);
+    const messageElement = container.querySelector(".message")!;
+
+    expect(messageElement.children[0]).toHaveClass("message-attachments");
+    expect(messageElement.children[1]).toHaveClass("message-body");
+    expect(messageElement.children[1]).toHaveTextContent("What is this?");
+  });
+
   it("animates a user entry with CSS and the final agent response at its state transition", () => {
     const animate = vi.fn(); const originalAnimate = HTMLElement.prototype.animate;
     Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });

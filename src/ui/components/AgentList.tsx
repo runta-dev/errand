@@ -39,7 +39,7 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, creat
       {!creatingAgentName && visibleAgents.length === 0 && <div className="agent-list-empty">
         {search.trim() ? "No agents found" : "No agents yet"}
       </div>}
-      {visibleAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""}`}>
+      {visibleAgents.map((agent) => <div key={agent.id} className={`agent-row ${selectedId === agent.id ? "selected" : ""} ${agent.status === "working" ? "is-working" : ""}`}>
         <button className="agent-select" onClick={() => onSelect(agent.id)}>
           <AgentAvatar agent={agent} />
           <span className="agent-copy"><strong><span>{agent.name}</span></strong>{agent.lastMessagePreview && <span className="agent-preview agent-preview-entering"><Suspense fallback={agent.lastMessagePreview}><Streamdown className="agent-preview-markdown" mode="static" controls={false} linkSafety={{ enabled: true }} skipHtml>{agent.lastMessagePreview}</Streamdown></Suspense></span>}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { AlertCircle } from "lucide-react";
 import { RuntaCloudAgentsClient } from "@/clients/http/RuntaCloudAgentsClient";
 import { useCrewController } from "@/state/useCrewController";
@@ -48,7 +48,7 @@ export function App() {
   const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client, signedIn);
   const refreshModelProviders = crew.refreshModelProviders;
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [creatingAgentPhase, setCreatingAgentPhase] = useState<"creating" | "typing">("creating"); const [creatingAgentBaselineIds, setCreatingAgentBaselineIds] = useState<ReadonlySet<string>>(() => new Set()); const [composerFocusRequest, setComposerFocusRequest] = useState(0); const [settingsOpen, setSettingsOpen] = useState(false); const [providerPolling, setProviderPolling] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [detailPanelWidth, setDetailPanelWidth] = useState(360); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [creatingAgentPhase, setCreatingAgentPhase] = useState<"creating" | "typing">("creating"); const [creatingAgentBaselineIds, setCreatingAgentBaselineIds] = useState<ReadonlySet<string>>(() => new Set()); const [composerFocusRequest, setComposerFocusRequest] = useState(0); const [settingsOpen, setSettingsOpen] = useState(false); const [providerPolling, setProviderPolling] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
@@ -178,10 +178,10 @@ export function App() {
   }, []);
   if (forceLoading || !authReady || crew.loading) return <div className="loading-screen"><div className="loading-avatar" aria-hidden="true"><AgentAvatar agent={{ id: "runta-crew-loading", name: "Runta Crew" }} size={56} /></div><span className="loading-copy" data-text="Getting your crew ready…">Getting your crew ready…</span></div>;
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
-  return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`}>
+  return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`} style={{ "--detail-panel-width": `${detailPanelWidth}px` } as CSSProperties}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} creatingAgentPhase={creatingAgentPhase} creatingAgentBaselineIds={creatingAgentBaselineIds} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
     {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} loading={crew.conversationLoading} focusRequest={composerFocusRequest} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding hasAgents={crew.agents.length > 0} />}
-    {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
+    {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} width={detailPanelWidth} onResize={setDetailPanelWidth} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
     <ErrorToast message={crew.error || authError} onDismiss={dismissError} />
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
