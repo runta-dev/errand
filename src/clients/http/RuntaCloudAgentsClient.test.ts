@@ -38,7 +38,7 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
     expect(await client.createAgent({ name: "Reviewer", modelProviderId: "provider-1" })).toEqual(expect.objectContaining({ id: "agent-2", status: "idle" }));
     expect(await client.updateAgent("agent-1", { name: "Atlas" })).toEqual(expect.objectContaining({ id: "agent-1", name: "Atlas" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("You are \"Reviewer\""), initial_message: "Introduce yourself briefly to the user. Do not use tools or ask a question.", model_provider: { type: "managed", id: "provider-1" } }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("Do not proactively mention any underlying model, provider, Pi, harness, runtime, or implementation details"), initial_message: expect.stringContaining("Hi, I'm Reviewer."), model_provider: { type: "managed", id: "provider-1" } }) }));
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
 
@@ -70,7 +70,7 @@ describe("RuntaCloudAgentsClient", () => {
   it("shows the initial greeting without exposing its internal prompt", async () => {
     const request = vi.fn(async () => ({ status: 200, body: [{
       id: "greeting-run", agent_id: "agent-1", status: "finished",
-      prompt: "Introduce yourself briefly to the user. Do not use tools or ask a question.",
+      prompt: "Introduce yourself briefly using only the Runta Crew identity and name from your system instructions. Do not mention any model, provider, Pi, harness, runtime, or implementation details. Do not use tools or ask a question.",
       result: "Hi, I’m ready to help.", error: null,
       created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:01Z",
     }] }));
