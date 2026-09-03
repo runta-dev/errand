@@ -76,7 +76,10 @@ describe("Conversation states", () => {
     Object.defineProperties(scroller!, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 400 }, scrollTop: { configurable: true, writable: true, value: 600 } });
     const scrollTo = vi.fn(); Object.defineProperty(scroller!, "scrollTo", { configurable: true, value: scrollTo });
 
+    fireEvent.scroll(scroller!);
     fireEvent.wheel(scroller!, { deltaY: -120 });
+    scroller!.scrollTop = 590; fireEvent.scroll(scroller!);
+    expect(screen.queryByRole("button", { name: "Scroll to latest message" })).not.toBeInTheDocument();
     scroller!.scrollTop = 240; fireEvent.scroll(scroller!);
     const returnButton = screen.getByRole("button", { name: "Scroll to latest message" });
     expect(returnButton).toBeInTheDocument();
