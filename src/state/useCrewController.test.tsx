@@ -111,7 +111,8 @@ describe("useCrewController", () => {
     await act(async () => { await result.current.reconnect(); });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
     act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent:first", notify: false }));
-    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "" }], streaming: true });
     act(() => listeners.get("conversation-atlas")?.({ type: "message.delta", messageId: "run-1:agent:second", delta: "Final answer after the tool" }));
     expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Final answer after the tool" }], streaming: true });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");

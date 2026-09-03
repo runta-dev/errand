@@ -161,7 +161,11 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       if (event.type === "message.completed") {
         const visualId = visualMessageIds.current.get(event.messageId) ?? event.messageId;
         if (event.notify === false) {
-          updateMessages((current) => current.filter((message) => message.id !== visualId));
+          updateMessages((current) => current.flatMap((message) => {
+            if (message.id !== visualId) return [message];
+            if (!message.id.startsWith(OPTIMISTIC_AGENT_PREFIX)) return [];
+            return [{ ...message, parts: message.parts.map((part) => part.type === "text" ? { ...part, text: "" } : part), streaming: true }];
+          }));
         } else {
           updateMessages((current) => {
             const completed = current.filter((message) => message.id === visualId || message.role !== "agent" || !message.streaming).map((message) => message.id === visualId ? { ...message, streaming: false } : message);
