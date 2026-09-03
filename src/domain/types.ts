@@ -34,5 +34,5 @@ export type ConversationEvent =
 export interface Subscription { unsubscribe(): void }
 
 export class CrewError extends Error {
-  constructor(public readonly code: "network" | "unauthorized" | "not_found" | "contract_pending" | "unknown", message: string, public readonly retryable = false) { super(message); this.name = "CrewError"; }
+  constructor(public readonly code: "network" | "unauthorized" | "not_found" | "conflict" | "contract_pending" | "unknown", message: string, public readonly retryable = false) { super(message); this.name = "CrewError"; }
 }
