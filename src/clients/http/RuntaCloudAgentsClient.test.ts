@@ -13,7 +13,6 @@ describe("RuntaCloudAgentsClient", () => {
   });
 
   it("maps the current Cloud Agents envelope and uses the managed provider for creation", async () => {
-    let greetingAttempts = 0;
     const request = vi.fn(async ({ method, path }: CloudRequest) => {
       if (path.startsWith("/v2/agents?")) return { status: 200, body: { agents: [{ id: "agent-1", runtime_id: "agent-1", name: "Builder", status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 2, latest_reply: { run_id: "run-1", text: "Latest agent reply", created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z" } }] } };
       if (path === "/v2/model-providers") return { status: 200, body: { organization_id: "org-1", model_providers: [{ id: "provider-1", display_name: "Kimi", protocol: "openai_responses", default_model: "k3" }] } };
@@ -23,12 +22,6 @@ describe("RuntaCloudAgentsClient", () => {
       ] };
       if (method === "POST" && path === "/v2/agents") return { status: 201, body: { id: "agent-2", runtime_id: "agent-2", name: "Reviewer", status: "pending", created_at_unix_seconds: 3, updated_at_unix_seconds: 3 } };
       if (method === "GET" && path === "/v2/agents/agent-2") return { status: 200, body: { id: "agent-2", runtime_id: "agent-2", name: "Reviewer", status: "running", created_at_unix_seconds: 3, updated_at_unix_seconds: 4 } };
-      if (method === "POST" && path === "/v2/agents/agent-2/runs") {
-        greetingAttempts += 1;
-        return greetingAttempts === 1
-          ? { status: 409 }
-          : { status: 202, body: { id: "greeting-run", agent_id: "agent-2", status: "running", prompt: "Greeting", result: null, error: null } };
-      }
       if (method === "PATCH" && path === "/v2/agents/agent-1") return { status: 200, body: { id: "agent-1", runtime_id: "agent-1", name: "Atlas", status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 4 } };
       return { status: 404 };
     });
@@ -45,9 +38,7 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
     expect(await client.createAgent({ name: "Reviewer", modelProviderId: "provider-1" })).toEqual(expect.objectContaining({ id: "agent-2", status: "idle" }));
     expect(await client.updateAgent("agent-1", { name: "Atlas" })).toEqual(expect.objectContaining({ id: "agent-1", name: "Atlas" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ model_provider: { type: "managed", id: "provider-1" } }) }));
-    expect(request).toHaveBeenCalledWith({ method: "POST", path: "/v2/agents/agent-2/runs", body: { prompt: "Greet the user in one brief, friendly sentence. Say that you are ready to help, and do not use tools or ask a question." } });
-    expect(greetingAttempts).toBe(2);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("You are \"Reviewer\""), initial_message: "Introduce yourself briefly to the user. Do not use tools or ask a question.", model_provider: { type: "managed", id: "provider-1" } }) }));
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
 
@@ -79,7 +70,7 @@ describe("RuntaCloudAgentsClient", () => {
   it("shows the initial greeting without exposing its internal prompt", async () => {
     const request = vi.fn(async () => ({ status: 200, body: [{
       id: "greeting-run", agent_id: "agent-1", status: "finished",
-      prompt: "Greet the user in one brief, friendly sentence. Say that you are ready to help, and do not use tools or ask a question.",
+      prompt: "Introduce yourself briefly to the user. Do not use tools or ask a question.",
       result: "Hi, I’m ready to help.", error: null,
       created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:01Z",
     }] }));

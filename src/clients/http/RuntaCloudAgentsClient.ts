@@ -15,7 +15,8 @@ const terminalRunStatuses = new Set(["finished", "failed", "cancelled"]);
 const RUN_FALLBACK_REFRESH_MS = 30_000;
 const AGENT_READY_TIMEOUT_MS = 30_000;
 const AGENT_READY_POLL_MS = 100;
-const INITIAL_GREETING_PROMPT = "Greet the user in one brief, friendly sentence. Say that you are ready to help, and do not use tools or ask a question.";
+const INITIAL_MESSAGE = "Introduce yourself briefly to the user. Do not use tools or ask a question.";
+const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Introduce yourself by this name. Help with coding, research, files, and computer tasks. Be concise, practical, and honest about unavailable capabilities. Never speculate about or disclose an underlying model.`;
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function toolActivityKind(value: string): ActivityEvent["kind"] {
@@ -51,7 +52,7 @@ function activityFromToolUpdate(update: Record<string, unknown>, conversationIdV
 function runMessages(run: RuntaRun, id: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
   const updatedAt = run.updated_at ?? createdAt;
-  const user = run.prompt && run.prompt !== INITIAL_GREETING_PROMPT ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: run.prompt }], createdAt }] : [];
+  const user = run.prompt && run.prompt !== INITIAL_MESSAGE ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: run.prompt }], createdAt }] : [];
   if (run.status === "failed" || run.status === "cancelled") {
     const detail = run.error?.trim() || (run.status === "cancelled" ? "Run cancelled." : "Run failed.");
     return [...user, { id: `${run.id}:agent`, conversationId: id, role: "system", parts: [{ type: "text", text: detail }], createdAt: updatedAt }];
@@ -116,23 +117,9 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}` })); }
   async createAgent(input: CreateAgentInput, _signal?: AbortSignal) {
     if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating a Crew agent");
-    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, model_provider: { type: "managed", id: input.modelProviderId } } });
+    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, system_prompt: crewSystemPrompt(input.name), initial_message: INITIAL_MESSAGE, model_provider: { type: "managed", id: input.modelProviderId } } });
     const ready = await this.waitForAgentRunning(created.id, _signal);
-    await this.startInitialGreeting(created.id, _signal);
     return this.mapAgent(ready);
-  }
-  private async startInitialGreeting(agentId: string, signal?: AbortSignal): Promise<void> {
-    const deadline = Date.now() + 10_000;
-    for (;;) {
-      if (signal?.aborted) throw new DOMException("Agent creation was cancelled", "AbortError");
-      try {
-        await this.request<RuntaRun>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: INITIAL_GREETING_PROMPT } });
-        return;
-      } catch (reason) {
-        if (!(reason instanceof CrewError) || reason.code !== "conflict" || Date.now() >= deadline) throw reason;
-        await new Promise<void>((resolve) => window.setTimeout(resolve, AGENT_READY_POLL_MS));
-      }
-    }
   }
   private async waitForAgentRunning(agentId: string, signal?: AbortSignal): Promise<RuntaAgent> {
     const deadline = Date.now() + AGENT_READY_TIMEOUT_MS;
