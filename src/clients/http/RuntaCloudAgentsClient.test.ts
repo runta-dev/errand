@@ -81,7 +81,7 @@ describe("RuntaCloudAgentsClient", () => {
     subscription.unsubscribe();
   });
 
-  it("replays run summaries from oldest to newest so the sidebar preview stays current", async () => {
+  it("establishes an initial run baseline without duplicating loaded history", async () => {
     const request = vi.fn(async () => ({ status: 200, body: [
       { id: "run-new", agent_id: "agent-1", status: "finished", prompt: "New prompt", result: "Newest reply", error: null, created_at: "2026-08-26T02:00:00Z", updated_at: "2026-08-26T02:00:01Z" },
       { id: "run-old", agent_id: "agent-1", status: "finished", prompt: "Old prompt", result: "Old reply", error: null, created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z" },
@@ -91,7 +91,8 @@ describe("RuntaCloudAgentsClient", () => {
     const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => {
       if (event.type === "message.created" && event.message.role === "agent") replies.push(event.message.parts[0]?.type === "text" ? event.message.parts[0].text : "");
     });
-    await vi.waitFor(() => expect(replies).toEqual(["Old reply", "Newest reply"]));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+    expect(replies).toEqual([]);
     subscription.unsubscribe();
   });
 

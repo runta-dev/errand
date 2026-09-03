@@ -196,6 +196,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const observed = new Map<string, string>();
     const streams = new Map<string, () => void>();
     const assistantStreams = new Map<string, { current?: string; seen: Set<string> }>();
+    let baselineReady = false;
     const bridge = window.runtaCrew?.cloud;
     const subscribeToRun = (run: RuntaRun) => {
       if (!bridge?.subscribe || streams.has(run.id) || terminalRunStatuses.has(run.status)) return;
@@ -250,18 +251,20 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       polling = true;
       try {
         const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
+        const establishingBaseline = !baselineReady;
         for (const run of runs.slice().reverse()) {
           const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
           const previous = observed.get(run.id); observed.set(run.id, signature);
           subscribeToRun(run);
-          if (previous === undefined) {
+          if (previous === undefined && !establishingBaseline) {
             for (const message of runMessages(run, id)) listener({ type: "message.created", message });
-          } else if (previous !== signature && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) {
+          } else if (!establishingBaseline && previous !== signature && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) {
             const agentMessage = runMessages(run, id).find((message) => message.id === `${run.id}:agent`);
             if (agentMessage) listener({ type: "message.updated", message: agentMessage });
           }
-          if (previous !== signature && terminalRunStatuses.has(run.status) && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          if (!establishingBaseline && previous !== signature && terminalRunStatuses.has(run.status) && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) listener({ type: "message.completed", messageId: `${run.id}:agent` });
         }
+        baselineReady = true;
         listener({ type: "connection.changed", state: "connected" });
       } catch { listener({ type: "connection.changed", state: "error" }); }
       finally { polling = false; if (pollAgain) { pollAgain = false; void poll(); } }
