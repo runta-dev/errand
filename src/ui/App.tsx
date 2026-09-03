@@ -15,6 +15,22 @@ import type { Agent } from "@/domain/types";
 
 const LANDING_AGENTS = ["Atlas", "Scout", "Mira", "Nova"] as const;
 
+function ErrorToast({ message, onDismiss }: { message?: string; onDismiss(): void }) {
+  const [renderedMessage, setRenderedMessage] = useState(message); const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (message) {
+      setRenderedMessage(message);
+      const frame = window.requestAnimationFrame(() => setVisible(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    setVisible(false);
+    const timer = window.setTimeout(() => setRenderedMessage(undefined), 180);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+  if (!renderedMessage) return null;
+  return <div className={`error-toast ${visible ? "is-visible" : "is-exiting"}`} role="alert"><AlertCircle size={17} /><span>{renderedMessage}</span><button onClick={onDismiss}>Dismiss</button></div>;
+}
+
 export function AgentsLanding({ hasAgents }: { hasAgents: boolean }) {
   return <main className="agents-landing" aria-label="Agents">
     <div className="agents-landing-avatars" aria-hidden="true">
@@ -139,7 +155,7 @@ export function App() {
       const settings = await window.runtaCrew?.settings.get();
       const provider = crew.modelProviders.find((item) => item.id === settings?.modelProviderId);
       if (!provider) {
-        setAuthError("Select a model provider in Settings before creating an agent.");
+        setAuthError("Select a model provider before creating an agent.");
         setSettingsOpen(true);
         return;
       }
@@ -162,7 +178,7 @@ export function App() {
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} creatingAgentBaselineIds={creatingAgentBaselineIds} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
     {crew.selectedAgent ? <Conversation agent={crew.selectedAgent} messages={crew.messages} activities={crew.activities} loading={crew.conversationLoading} focusRequest={composerFocusRequest} onSend={crew.sendMessage} onToggleDetails={() => setDetailsOpen((value) => !value)} /> : <AgentsLanding hasAgents={crew.agents.length > 0} />}
     {detailsMounted && crew.selectedAgent && <DetailPanel open={detailsOpen} agentName={crew.selectedAgent.name} computer={crew.computer} approvals={crew.approvals} onApproval={crew.respondToApproval} onComputerAction={crew.openComputer} onClose={() => setDetailsOpen(false)} />}
-    {(crew.error || authError) && <div className="error-toast"><AlertCircle size={17} /><span>{crew.error || authError}</span><button onClick={() => { crew.dismissError(); setAuthError(undefined); }}>Dismiss</button></div>}
+    <ErrorToast message={crew.error || authError} onDismiss={dismissError} />
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
     {settingsOpen && <SettingsDialog providers={crew.modelProviders} organizationId={crew.organizationId} accountName={userName} accountEmail={userEmail} onModelProviderOpen={startModelProviderPolling} onLogout={() => { setProviderPolling(false); setSettingsOpen(false); void logout(); }} onClose={() => { setProviderPolling(false); setSettingsOpen(false); }} />}

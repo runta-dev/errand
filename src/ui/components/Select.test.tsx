@@ -41,4 +41,10 @@ describe("Select", () => {
     bounds.mockRestore();
   });
 
+  it("notifies when the menu opens", async () => {
+    const onOpen = vi.fn(); const user = userEvent.setup();
+    render(<Select ariaLabel="Model provider" value="" options={[]} onChange={() => undefined} onOpen={onOpen} />);
+    await user.click(screen.getByRole("button", { name: "Model provider" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
 });
