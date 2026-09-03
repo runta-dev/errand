@@ -31,7 +31,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   const [loading, setLoading] = useState(enabled); const [error, setError] = useState<string>();
   const [loadedAgentIds, setLoadedAgentIds] = useState<ReadonlySet<string>>(() => new Set());
   const [liveAgentId, setLiveAgentId] = useState(""); const [revalidateVersion, setRevalidateVersion] = useState(0);
-  const snapshots = useRef(new Map<string, AgentSnapshot>()); const selectedAgentIdRef = useRef(selectedAgentId); const deletingAgentIds = useRef(new Set<string>()); const sendingAgentIds = useRef(new Set<string>()); const visualMessageIds = useRef(new Map<string, string>());
+  const snapshots = useRef(new Map<string, AgentSnapshot>()); const selectedAgentIdRef = useRef(selectedAgentId); const deletingAgentIds = useRef(new Set<string>()); const sendingAgentRequests = useRef(new Map<string, number>()); const visualMessageIds = useRef(new Map<string, string>());
   const selectedAgent = useMemo(() => agents.find((agent) => agent.id === selectedAgentId), [agents, selectedAgentId]);
   const conversationId = selectedAgentId ? `conversation-${selectedAgentId}` : "";
   const conversationLoading = Boolean(selectedAgentId && !loadedAgentIds.has(selectedAgentId));
@@ -127,7 +127,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
             }
           }
           if (knownVisualId) nextMessage = { ...event.message, id: knownVisualId };
-          if (event.message.role === "user" && sendingAgentIds.current.has(selectedAgentId)) {
+          if (event.message.role === "user" && (sendingAgentRequests.current.get(selectedAgentId) ?? 0) > 0) {
             const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_USER_PREFIX) && messageText(message) === messageText(event.message));
             if (optimistic) { visualMessageIds.current.set(event.message.id, optimistic.id); nextMessage = { ...event.message, id: optimistic.id }; }
           }
@@ -160,10 +160,12 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         if (event.notify === false) {
           updateMessages((current) => current.filter((message) => message.id !== visualId));
         } else {
-          updateMessages((current) => current.filter((message) => message.id === visualId || message.role !== "agent" || !message.streaming).map((message) => message.id === visualId ? { ...message, streaming: false } : message));
-          const completedMessages = (snapshots.current.get(selectedAgentId)?.messages ?? []).map((message) => message.id === visualId ? { ...message, streaming: false } : message);
-          const completedPreview = latestCompletedAgentPreview(completedMessages);
-          if (completedPreview) setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: completedPreview } : agent));
+          updateMessages((current) => {
+            const completed = current.filter((message) => message.id === visualId || message.role !== "agent" || !message.streaming).map((message) => message.id === visualId ? { ...message, streaming: false } : message);
+            const completedPreview = latestCompletedAgentPreview(completed);
+            if (completedPreview) setAgents((agents) => agents.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: completedPreview } : agent));
+            return completed;
+          });
           void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." });
         }
       }
@@ -207,8 +209,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     sendMessage: async (text: string, attachments: Attachment[] = []) => {
       if (!conversationId || !selectedAgentId) return;
       const targetAgentId = selectedAgentId; const targetConversationId = conversationId; const nonce = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      if (sendingAgentIds.current.has(targetAgentId)) return;
-      sendingAgentIds.current.add(targetAgentId);
+      sendingAgentRequests.current.set(targetAgentId, (sendingAgentRequests.current.get(targetAgentId) ?? 0) + 1);
       const optimisticUserId = `${OPTIMISTIC_USER_PREFIX}${nonce}`; const optimisticAgentId = `${OPTIMISTIC_AGENT_PREFIX}${nonce}`; const createdAt = new Date().toISOString();
       const optimisticUser: Message = { id: optimisticUserId, conversationId: targetConversationId, role: "user", parts: [...(text ? [{ type: "text" as const, text }] : []), ...attachments.map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt };
       const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
@@ -236,7 +237,9 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         setError(reason instanceof Error ? reason.message : "Could not send message");
         throw reason;
       } finally {
-        sendingAgentIds.current.delete(targetAgentId);
+        const pending = (sendingAgentRequests.current.get(targetAgentId) ?? 1) - 1;
+        if (pending > 0) sendingAgentRequests.current.set(targetAgentId, pending);
+        else sendingAgentRequests.current.delete(targetAgentId);
       }
     },
     respondToApproval: async (requestId: string, decision: "allow" | "deny", note?: string) => { const targetAgentId = selectedAgentId; const next = await client.respondToApproval({ requestId, decision, note }); const snapshot = snapshots.current.get(targetAgentId); const nextApprovals = (snapshot?.approvals ?? []).map((item) => item.id === next.id ? next : item); if (snapshot) snapshots.current.set(targetAgentId, { ...snapshot, approvals: nextApprovals, cachedAt: Date.now() }); if (selectedAgentIdRef.current === targetAgentId) setApprovals(nextApprovals); },
