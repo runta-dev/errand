@@ -199,6 +199,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       const optimisticAgent: Message = { id: optimisticAgentId, conversationId: targetConversationId, role: "agent", parts: [{ type: "text", text: "" }], createdAt, streaming: true };
       const snapshot = snapshots.current.get(targetAgentId) ?? { messages: [], approvals: [], cachedAt: Date.now() };
       const optimisticMessages = [...snapshot.messages, optimisticUser, optimisticAgent];
+      if (selectedAgentIdRef.current === targetAgentId) setActivities([]);
       snapshots.current.set(targetAgentId, { ...snapshot, messages: optimisticMessages, cachedAt: Date.now() });
       if (selectedAgentIdRef.current === targetAgentId) { setMessages(optimisticMessages); setLiveAgentId(targetAgentId); }
       try {

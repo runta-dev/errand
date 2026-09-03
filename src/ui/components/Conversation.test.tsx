@@ -157,6 +157,24 @@ describe("Conversation states", () => {
     expect(screen.queryByText("Browsing web")).not.toBeInTheDocument();
   });
 
+  it("shows elapsed working time and expandable tool details", () => {
+    const message: Message = { id: "run-timer:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date(Date.now() - 65_000).toISOString(), streaming: true };
+    render(<MessageView message={message} activities={[{ id: "tool:install", conversationId: message.conversationId, kind: "terminal", title: "Installing Chromium", detail: "Package installation", status: "running", createdAt: message.createdAt }]} />);
+
+    expect(screen.getByText("1:05")).toBeInTheDocument();
+    expect(screen.getAllByText("Installing Chromium")).toHaveLength(2);
+    expect(screen.getByText("Package installation")).toBeInTheDocument();
+  });
+
+  it("opens a safe text attachment preview", async () => {
+    window.runtaCrew = { attachments: { choose: async () => [], read: async () => ({ name: "report.txt", mediaType: "text/plain", base64: btoa("hello preview") }) } } as unknown as typeof window.runtaCrew;
+    const message: Message = { id: "artifact-message", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "attachment", attachment: { id: "file-1", name: "report.txt", size: 13, mediaType: "text/plain", source: "local-selection" } }], createdAt: new Date().toISOString() };
+    render(<MessageView message={message} activities={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: /report.txt/i }));
+
+    expect(await screen.findByRole("dialog", { name: "Preview report.txt" })).toHaveTextContent("hello preview");
+  });
+
   it("animates a user entry and the final agent response at their actual state transitions", () => {
     const animate = vi.fn(); const originalAnimate = HTMLElement.prototype.animate;
     Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });

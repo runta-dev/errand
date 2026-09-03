@@ -1,10 +1,11 @@
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
+import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type Attachment, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
 import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
 interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
+interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
@@ -37,9 +38,11 @@ function activityFromToolUpdate(update: Record<string, unknown>, conversationIdV
   const id = stringValue(update.toolCallId) ?? stringValue(update.tool_call_id) ?? stringValue(update.id);
   if (!id) return undefined;
   const rawTitle = stringValue(update.title) ?? stringValue(update.name) ?? stringValue(update.kind) ?? "Working";
+  const detail = stringValue(update.description) ?? stringValue(update.detail) ?? rawTitle;
   const rawStatus = stringValue(update.status)?.toLowerCase() ?? "running";
   const status: ActivityEvent["status"] = /fail|error/.test(rawStatus) ? "failed" : /complete|finish|done/.test(rawStatus) ? "completed" : "running";
-  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`), title: toolActivityTitle(rawTitle), detail: rawTitle, status, createdAt: new Date().toISOString() };
+  const timestamp = new Date().toISOString();
+  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(`${stringValue(update.kind) ?? ""} ${rawTitle}`), title: toolActivityTitle(rawTitle), detail, status, createdAt: timestamp, updatedAt: timestamp };
 }
 
 function runMessages(run: RuntaRun, id: string): Message[] {
@@ -127,6 +130,14 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const latest = runs[0];
     return [{ id: conversationId(agentId), agentId, title: "Agent conversation", updatedAt: latest?.updated_at ?? new Date().toISOString() }];
   }
+  private async listRunArtifacts(agentId: string, runId: string): Promise<Attachment[]> {
+    try {
+      const artifacts = await this.request<RuntaArtifact[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/artifacts?run_id=${encodeURIComponent(runId)}` });
+      return artifacts.filter((artifact) => typeof artifact.id === "string" && typeof artifact.name === "string" && typeof artifact.media_type === "string" && typeof artifact.size === "number").map((artifact) => ({ id: artifact.id, name: artifact.name, size: artifact.size, mediaType: artifact.media_type, source: "cloud", agentId }));
+    } catch {
+      return [];
+    }
+  }
   private replayRunMessages(agentId: string, run: RuntaRun, id: string, signal?: AbortSignal): Promise<Message[]> {
     const fallback = runMessages(run, id);
     const bridge = window.runtaCrew?.cloud;
@@ -180,7 +191,13 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async getConversation(id: string, _signal?: AbortSignal) {
     const agentId = agentIdFromConversation(id);
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
-    const messageGroups = await mapWithConcurrency(runs.slice().reverse(), 8, (run) => this.replayRunMessages(agentId, run, id, _signal));
+    const messageGroups = await mapWithConcurrency(runs.slice().reverse(), 8, async (run) => {
+      const [runMessagesValue, artifacts] = await Promise.all([this.replayRunMessages(agentId, run, id, _signal), terminalRunStatuses.has(run.status) ? this.listRunArtifacts(agentId, run.id) : Promise.resolve([])]);
+      if (!artifacts.length) return runMessagesValue;
+      const target = [...runMessagesValue].reverse().find((message) => message.role === "agent");
+      if (target) target.parts.push(...artifacts.map((attachment) => ({ type: "attachment" as const, attachment })));
+      return runMessagesValue;
+    });
     const messages = messageGroups.flat();
     return { conversation: { id, agentId, title: "Agent conversation", updatedAt: runs[0]?.updated_at ?? new Date().toISOString() }, messages };
   }
