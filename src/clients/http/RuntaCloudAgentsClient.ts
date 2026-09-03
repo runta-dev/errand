@@ -97,33 +97,33 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
 
   async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderCatalog> {
     void _signal;
-    const response = await this.request<{ organization_id: string; model_providers: ModelProvider[] }>({ method: "GET", path: "/v1/model-providers" });
+    const response = await this.request<{ organization_id: string; model_providers: ModelProvider[] }>({ method: "GET", path: "/v2/model-providers" });
     return { organizationId: response.organization_id, providers: response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined })) };
   }
 
   async listAgents(_signal?: AbortSignal) {
     void _signal;
-    const response = await this.request<{ agents: RuntaAgent[] }>({ method: "GET", path: "/v1/agents?limit=250&include_latest_reply=true" });
+    const response = await this.request<{ agents: RuntaAgent[] }>({ method: "GET", path: "/v2/agents?limit=250&include_latest_reply=true" });
     return response.agents.map((agent) => this.mapAgent(agent));
   }
-  async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}` })); }
+  async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}` })); }
   async createAgent(input: CreateAgentInput, _signal?: AbortSignal) {
     void _signal;
     if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating a Crew agent");
-    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v1/agents", body: { name: input.name, model_provider: { type: "managed", id: input.modelProviderId } } });
+    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, model_provider: { type: "managed", id: input.modelProviderId } } });
     return this.mapAgent(created);
   }
   async updateAgent(agentId: string, input: UpdateAgentInput, _signal?: AbortSignal): Promise<Agent> {
     void _signal;
     if (!input.name || Object.keys(input).some((key) => key !== "name")) throw new CrewError("contract_pending", "Only the Agent name can be updated");
-    return this.mapAgent(await this.request<RuntaAgent>({ method: "PATCH", path: `/v1/agents/${encodeURIComponent(agentId)}`, body: { name: input.name } }));
+    return this.mapAgent(await this.request<RuntaAgent>({ method: "PATCH", path: `/v2/agents/${encodeURIComponent(agentId)}`, body: { name: input.name } }));
   }
-  async deleteAgent(agentId: string, _signal?: AbortSignal) { void _signal; await this.request<void>({ method: "DELETE", path: `/v1/agents/${encodeURIComponent(agentId)}?delete_runtime=true` }); }
+  async deleteAgent(agentId: string, _signal?: AbortSignal) { void _signal; await this.request<void>({ method: "DELETE", path: `/v2/agents/${encodeURIComponent(agentId)}?delete_runtime=true` }); }
   async duplicateAgent(_agentId: string, _signal?: AbortSignal): Promise<Agent> { void _agentId; void _signal; throw new CrewError("contract_pending", "Agent duplication requires the Cloud Agents duplication contract"); }
   async setAgentUnread(agentId: string, _unread: boolean, signal?: AbortSignal) { return this.getAgent(agentId, signal); }
   async listConversations(agentId: string, _signal?: AbortSignal) {
     void _signal;
-    const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
+    const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
     const latest = runs[0];
     return [{ id: conversationId(agentId), agentId, title: "Agent conversation", updatedAt: latest?.updated_at ?? new Date().toISOString() }];
   }
@@ -151,7 +151,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       };
       const timeout = window.setTimeout(finish, 10_000);
       signal?.addEventListener("abort", finish, { once: true });
-      unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
+      unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
         if (event.event === "stream.closed" || event.event === "error") { finish(); return; }
         if (event.event === "acp.event" && event.data && typeof event.data === "object") {
           const payload = event.data as { params?: { update?: { sessionUpdate?: string } } };
@@ -179,7 +179,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   }
   async getConversation(id: string, _signal?: AbortSignal) {
     const agentId = agentIdFromConversation(id);
-    const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
+    const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
     const messageGroups = await mapWithConcurrency(runs.slice().reverse(), 8, (run) => this.replayRunMessages(agentId, run, id, _signal));
     const messages = messageGroups.flat();
     return { conversation: { id, agentId, title: "Agent conversation", updatedAt: runs[0]?.updated_at ?? new Date().toISOString() }, messages };
@@ -187,7 +187,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async sendMessage(input: SendMessageInput): Promise<Message> {
     if (input.attachments?.length) throw new CrewError("contract_pending", "Cloud attachment upload is not available yet");
     const agentId = agentIdFromConversation(input.conversationId);
-    const run = await this.request<RuntaRun>({ method: "POST", path: `/v1/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
+    const run = await this.request<RuntaRun>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
     for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();
     return { id: `${run.id}:user`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
   }
@@ -207,7 +207,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         listener({ type: "message.completed", messageId: assistant.current, notify });
         assistant.current = undefined;
       };
-      const unsubscribe = bridge.subscribe(`/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event: CloudStreamEvent) => {
+      const unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event: CloudStreamEvent) => {
         if (event.event === "run.status" && event.data && typeof event.data === "object") {
           const data = event.data as Partial<RuntaRun> & { session_id?: string | null };
           if (typeof data.status !== "string") return;
@@ -249,7 +249,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       if (polling) { pollAgain = true; return; }
       polling = true;
       try {
-        const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v1/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
+        const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
         for (const run of runs.slice().reverse()) {
           const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
           const previous = observed.get(run.id); observed.set(run.id, signature);

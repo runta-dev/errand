@@ -129,7 +129,7 @@ ipcMain.handle("auth:logout", async () => {
   if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
   const token = safeStorage.decryptString(readFileSync(credentialFile()));
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-  const response = await net.fetch(new URL("v1/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+  const response = await net.fetch(new URL("v2/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
   if (!response.ok && response.status !== 401) throw new Error(`Runta key revocation failed (${response.status})`);
   if (existsSync(credentialFile())) rmSync(credentialFile());
   authorizationStatus = "idle";
@@ -138,7 +138,7 @@ ipcMain.handle("auth:logout", async () => {
 ipcMain.handle("auth:start", async () => {
   if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-  const response = await net.fetch(new URL("v1/auth/device/authorization", apiBase).toString(), {
+  const response = await net.fetch(new URL("v2/auth/device/authorization", apiBase).toString(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: "runta_crew", device_name: `Runta Crew on ${process.platform}`, app_url: settings.dashboardUrl.replace(/\/+$/, "") }),
@@ -154,7 +154,7 @@ ipcMain.handle("auth:start", async () => {
       if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) { authorizationStatus = "expired"; return; }
       let tokenResponse: Response;
       try {
-        tokenResponse = await net.fetch(new URL("v1/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+        tokenResponse = await net.fetch(new URL("v2/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
       } catch {
         continue;
       }
@@ -186,7 +186,7 @@ ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
   const token = safeStorage.decryptString(encrypted);
   const endpoint = new URL(`${settings.endpoint.replace(/\/+$/, "")}/`);
   const url = new URL(request.path.replace(/^\/+/, ""), endpoint);
-  const apiPrefix = `${endpoint.pathname.replace(/\/+$/, "")}/v1/`;
+  const apiPrefix = `${endpoint.pathname.replace(/\/+$/, "")}/v2/`;
   if (url.origin !== endpoint.origin || !url.pathname.startsWith(apiPrefix)) throw new Error("Cloud request path is not allowed");
   const response = await net.fetch(url.toString(), {
     method: request.method,
