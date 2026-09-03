@@ -136,6 +136,20 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       await new Promise<void>((resolve) => window.setTimeout(resolve, AGENT_READY_POLL_MS));
     }
   }
+  async waitForInitialReply(agentId: string, signal?: AbortSignal): Promise<void> {
+    const deadline = Date.now() + 3 * 60_000;
+    for (;;) {
+      if (signal?.aborted) throw new DOMException("Agent creation was cancelled", "AbortError");
+      const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=1` });
+      const run = runs[0];
+      if (run && terminalRunStatuses.has(run.status)) {
+        if (run.status !== "finished") throw new CrewError("unknown", run.error?.trim() || "The Agent introduction failed", true);
+        if (run.result?.trim()) return;
+      }
+      if (Date.now() >= deadline) throw new CrewError("network", "The Agent introduction is still pending", true);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+    }
+  }
   async updateAgent(agentId: string, input: UpdateAgentInput, _signal?: AbortSignal): Promise<Agent> {
     void _signal;
     if (!input.name || Object.keys(input).some((key) => key !== "name")) throw new CrewError("contract_pending", "Only the Agent name can be updated");

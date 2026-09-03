@@ -159,7 +159,9 @@ export function App() {
         setSettingsOpen(true);
         return;
       }
-      await crew.createAgent({ name, modelProviderId: provider.id });
+      const agent = await crew.createAgent({ name, modelProviderId: provider.id });
+      await client.waitForInitialReply(agent.id);
+      crew.setSelectedAgentId(agent.id);
       setComposerFocusRequest((current) => current + 1);
     }
     catch (reason) { setAuthError(reason instanceof Error ? reason.message : "Could not create the agent."); }

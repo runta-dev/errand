@@ -84,6 +84,15 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
   });
 
+  it("waits for the complete initial Agent reply before focusing", async () => {
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "greeting-run", agent_id: "agent-1", status: "finished", result: "I am Atlas." }] }));
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
+
+    await new RuntaCloudAgentsClient().waitForInitialReply("agent-1");
+
+    expect(request).toHaveBeenCalledWith({ method: "GET", path: "/v2/agents/agent-1/runs?limit=1" });
+  });
+
   it("discovers a locally created run immediately instead of waiting for fallback polling", async () => {
     let created = false;
     const subscribe = vi.fn(() => () => undefined);

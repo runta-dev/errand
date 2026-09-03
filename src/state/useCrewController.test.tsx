@@ -98,7 +98,9 @@ describe("useCrewController", () => {
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
 
-    await act(async () => { resolveSend({ id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
+    await act(async () => { resolveSend({ id: "run-1:user:response", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
+    expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
@@ -137,7 +139,7 @@ describe("useCrewController", () => {
     const { result } = renderHook(() => useCrewController(client));
     await waitFor(() => expect(result.current.loading).toBe(false));
     await act(async () => { await result.current.createAgent({ name: "Atlas", modelProviderId: "provider" }); });
-    expect(result.current.selectedAgentId).toBe("new-agent");
+    expect(result.current.selectedAgentId).toBe("");
     expect(result.current.conversationLoading).toBe(false);
     expect(result.current.messages).toEqual([]);
   });

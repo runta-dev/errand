@@ -37,7 +37,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   const conversationLoading = Boolean(selectedAgentId && !loadedAgentIds.has(selectedAgentId));
   useEffect(() => { selectedAgentIdRef.current = selectedAgentId; }, [selectedAgentId]);
 
-  const refreshAgents = useCallback(async () => {
+  const refreshAgents = useCallback(async (preserveSelection = false) => {
     const fetched = await client.listAgents();
     for (const agentId of deletingAgentIds.current) if (!fetched.some((agent) => agent.id === agentId)) deletingAgentIds.current.delete(agentId);
     const next = fetched.filter((agent) => !deletingAgentIds.current.has(agent.id));
@@ -53,7 +53,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       const preserveLocalPreview = Boolean(localPreview) || (agent.id === selectedId && selectedIsStreaming);
       return { ...agent, lastMessagePreview: preserveLocalPreview ? localPreview || existing?.lastMessagePreview : agent.lastMessagePreview ?? existing?.lastMessagePreview };
     }));
-    setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : next[0]?.id || ""); return next;
+    setSelectedAgentId((current) => current && next.some((agent) => agent.id === current) ? current : preserveSelection ? current : next[0]?.id || ""); return next;
   }, [client]);
   const refreshModelProviders = useCallback(async () => {
     const catalog = await client.listModelProviders();
@@ -182,7 +182,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
   return {
     agents, modelProviders, organizationId, refreshModelProviders, selectedAgent, selectedAgentId, setSelectedAgentId, messages, activities, approvals, computer, connection, loading, conversationLoading, error,
     dismissError: () => setError(undefined),
-    createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); snapshots.current.set(agent.id, { messages: [], approvals: [], cachedAt: 0 }); setLoadedAgentIds((current) => new Set(current).add(agent.id)); await refreshAgents(); setSelectedAgentId(agent.id); return agent; },
+    createAgent: async (input: CreateAgentInput) => { const agent = await client.createAgent(input); snapshots.current.set(agent.id, { messages: [], approvals: [], cachedAt: 0 }); setLoadedAgentIds((current) => new Set(current).add(agent.id)); await refreshAgents(true); return agent; },
     updateAgent: async (agentId: string, input: UpdateAgentInput) => { await client.updateAgent(agentId, input); await refreshAgents(); },
     deleteAgent: async (agentId: string) => {
       const removedAgent = agents.find((agent) => agent.id === agentId); const previousSelectedAgentId = selectedAgentId;
@@ -223,7 +223,10 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         const message = await client.sendMessage({ conversationId: targetConversationId, text, attachments });
         visualMessageIds.current.set(message.id, optimisticUserId);
         const runId = message.id.match(/^(.+):user(?:$|:)/)?.[1];
-        if (runId) visualMessageIds.current.set(`${runId}:agent`, existingWorking?.id ?? optimisticAgentId);
+        if (runId) {
+          visualMessageIds.current.set(`${runId}:user`, optimisticUserId);
+          visualMessageIds.current.set(`${runId}:agent`, existingWorking?.id ?? optimisticAgentId);
+        }
         const latest = snapshots.current.get(targetAgentId) ?? snapshot;
         const visualMessage = { ...message, id: optimisticUserId };
         const reconciled = latest.messages.map((item) => item.id === optimisticUserId ? visualMessage : item).filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
