@@ -3,6 +3,7 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationStatus } from "../../src/shared/desktop";
+import { cloudRunEventsPath } from "../../src/shared/cloudStreamPath";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -200,7 +201,7 @@ ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
 });
 ipcMain.on("cloud:stream:subscribe", (event, value: { subscriptionId?: unknown; path?: unknown }) => {
   const subscriptionId = typeof value?.subscriptionId === "string" && /^\d{1,10}$/.test(value.subscriptionId) ? value.subscriptionId : undefined;
-  const path = typeof value?.path === "string" && /^\/v1\/agents\/[A-Za-z0-9._-]{1,160}\/runs\/[A-Za-z0-9._-]{1,160}\/events(?:\?after=-?\d+)?$/.test(value.path) ? value.path : undefined;
+  const path = cloudRunEventsPath(value?.path);
   if (!subscriptionId || !path) return;
   const senderId = event.sender.id; const key = `${senderId}:${subscriptionId}`;
   if (!cloudStreamSenders.has(senderId)) {
