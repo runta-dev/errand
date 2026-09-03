@@ -6,7 +6,7 @@ import { AgentAvatar } from "./AgentAvatar";
 const Streamdown = lazy(async () => ({ default: (await import("streamdown")).Streamdown }));
 
 export type AgentAction = "edit" | "delete";
-export function AgentList({ agents, selectedId, search, creatingAgentName, creatingAgentBaselineIds, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgentName?: string; creatingAgentBaselineIds?: ReadonlySet<string>; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
+export function AgentList({ agents, selectedId, search, creatingAgentName, creatingAgentPhase = "creating", creatingAgentBaselineIds, signedIn, userName, onSearch, onSelect, onAction, onCreate, onSettings, onSignIn, onLogout }: { agents: Agent[]; selectedId: string; search: string; creatingAgentName?: string; creatingAgentPhase?: "creating" | "typing"; creatingAgentBaselineIds?: ReadonlySet<string>; signedIn: boolean; userName: string; onSearch(value: string): void; onSelect(id: string): void; onAction(agent: Agent, action: AgentAction): void; onCreate(): void; onSettings(): void; onSignIn(): void; onLogout(): void }) {
   const [menuAgentId, setMenuAgentId] = useState<string>(); const [accountOpen, setAccountOpen] = useState(false);
   useEffect(() => { if (!menuAgentId) return; const close = () => setMenuAgentId(undefined); window.addEventListener("pointerdown", close); return () => window.removeEventListener("pointerdown", close); }, [menuAgentId]);
   useEffect(() => {
@@ -31,7 +31,7 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, creat
       {creatingAgentName && <div className="agent-row agent-creating" role="status" aria-live="polite">
         <div className="agent-select">
           <AgentAvatar agent={{ id: `creating-${creatingAgentName}`, name: creatingAgentName }} />
-          <span className="agent-copy"><strong><span>{creatingAgentName}</span></strong><span className="agent-preview">Creating…</span></span>
+          <span className="agent-copy"><strong><span>{creatingAgentName}</span></strong><span className="agent-preview">{creatingAgentPhase === "typing" ? "Typing…" : "Creating…"}</span></span>
         </div>
       </div>}
       {!creatingAgentName && visibleAgents.length === 0 && <div className="agent-list-empty">

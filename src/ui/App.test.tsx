@@ -77,9 +77,11 @@ describe("Runta Crew authentication surfaces", () => {
   });
 
   it("shows immediate feedback while an agent is being created", () => {
-    render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    const { rerender } = render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("AtlasCreating…");
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+    rerender(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" creatingAgentPhase="typing" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("status")).toHaveTextContent("AtlasTyping…");
   });
 
   it("does not duplicate a creating row when polling sees the new server agent first", () => {
