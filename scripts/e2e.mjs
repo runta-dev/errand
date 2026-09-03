@@ -15,8 +15,10 @@ async function request(path, init = {}) {
   return body;
 }
 
+const profile = await request("/v2/me");
+assert.equal(typeof profile.data?.user_id, "string", "user-authorized device token must expose /v2/me");
+
 const providers = await request("/v2/model-providers");
-assert.equal(typeof providers.organization_id, "string", "user-authorized device token must expose an organization");
 const provider = providers.model_providers?.[0];
 assert.equal(typeof provider?.id, "string", "an E2E model provider is required");
 

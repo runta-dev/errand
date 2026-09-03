@@ -43,13 +43,14 @@ export function App() {
   async function connectAuthenticatedAccount() {
     let timeout: number | undefined;
     const response = await Promise.race([
-      window.runtaCrew?.cloud?.request({ method: "GET", path: "/v2/model-providers" }).catch(() => undefined),
+      window.runtaCrew?.cloud?.request({ method: "GET", path: "/v2/me" }).catch(() => undefined),
       new Promise<undefined>((resolve) => { timeout = window.setTimeout(() => resolve(undefined), 5_000); }),
     ]).finally(() => { if (timeout !== undefined) window.clearTimeout(timeout); });
     if (!response) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError("Runta session validation did not return a response."); return false; }
     if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
-    setUserName(accountDisplayName());
-    setUserEmail("");
+    const profile = response.body as { data?: { display_name?: string | null; email?: string } } | undefined;
+    setUserName(accountDisplayName(profile?.data));
+    setUserEmail(profile?.data?.email ?? "");
     setClient(new RuntaCloudAgentsClient()); setSignedIn(true);
     setAuthReady(true); setAuthError(undefined);
     return true;
