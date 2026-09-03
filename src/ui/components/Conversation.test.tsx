@@ -169,8 +169,9 @@ describe("Conversation states", () => {
     expect(screen.getByText("Installing Chromium")).toBeInTheDocument();
     expect(screen.getByText("Package installation")).toBeInTheDocument();
     const summary = screen.getByRole("status", { name: "Agent is working: Installing Chromium" });
-    fireEvent.click(summary);
     expect(summary.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
   });
 
   it("opens a safe text attachment preview", async () => {

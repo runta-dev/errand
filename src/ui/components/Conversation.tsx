@@ -24,7 +24,7 @@ function openExternalLink(event: MouseEvent<HTMLDivElement>) {
   } catch { /* Ignore malformed Agent output instead of navigating the webview. */ }
 }
 function WorkingActivity({ agent, label, activities, startedAt }: { agent?: Pick<Agent, "id" | "name">; label: string; activities: ActivityEvent[]; startedAt: string }) {
-  const [now, setNow] = useState(0); const [open, setOpen] = useState(true);
+  const [now, setNow] = useState(0); const [open, setOpen] = useState(false);
   useEffect(() => { setNow(Date.now()); const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
   return <details className="agent-working-details" open={open}><summary role="status" aria-label={`${agent?.name ?? "Agent"} is working: ${label}`} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}><span className="agent-working-avatar"><AgentAvatar agent={agent ?? { id: "working", name: "Agent" }} size={38} /></span><span className="agent-working-progress"><span>Working for</span><time>{elapsedLabel(now - Date.parse(startedAt))}</time></span><ChevronRight className="agent-working-chevron" size={15} /></summary>{activities.length > 0 && <div className="agent-working-tools">{activities.map((activity) => { const Icon = activityIcon[activity.kind]; return <details className={`agent-tool-detail ${activity.status}`} key={activity.id}><summary><Icon size={14} /><span>{activity.title}</span><small>{activity.status === "running" ? "Running" : activity.status === "failed" ? "Failed" : "Done"}</small><ChevronDown size={13} /></summary><div>{activity.detail}</div></details>; })}</div>}</details>;
 }
