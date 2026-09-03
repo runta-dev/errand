@@ -60,7 +60,7 @@ describe("RuntaCloudAgentsClient", () => {
     expect(events).toContainEqual({ type: "message.created", message: expect.objectContaining({ id: "run-1:agent:assistant-2", parts: [{ type: "text", text: "Hi" }], streaming: true }) });
     expect(events).toContainEqual({ type: "message.delta", messageId: "run-1:agent:assistant-2", delta: " there" });
     expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "Reading file", kind: "file", status: "running" }) });
-    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", status: "completed" }) });
+    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "Reading file", kind: "file", status: "completed" }) });
     expect(events).not.toContainEqual(expect.objectContaining({ type: "message.updated", message: expect.objectContaining({ id: "run-1:agent" }) }));
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-2", notify: true });
     subscription.unsubscribe();
