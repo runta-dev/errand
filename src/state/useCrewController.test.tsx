@@ -129,6 +129,22 @@ describe("useCrewController", () => {
     expect(result.current.agents[0]?.lastMessagePreview).toBe("I'm Atlas, ready to help.");
   });
 
+  it("keeps a steering message visible when delivery acknowledgement fails", async () => {
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [agent("atlas", "Atlas")],
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async (id) => [{ id: `conversation-${id}`, agentId: id, title: id, updatedAt: new Date(0).toISOString() }], getConversation: async (id) => ({ conversation: { id, agentId: "atlas", title: "Atlas", updatedAt: new Date(0).toISOString() }, messages: [{ id: "working", conversationId: id, role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date(0).toISOString(), streaming: true }] }),
+      sendMessage: async () => { throw new Error("Steer acknowledgement failed"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer: async (id) => ({ id, agentId: id, runtimeName: id, status: "online", capabilities: ["open"] }), openComputer: async () => ({ mode: "remote", url: "https://example.test", protocols: [] }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test", protocols: [] }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
+    await waitFor(() => expect(result.current.messages[0]?.id).toBe("working"));
+    let failure: unknown;
+    await act(async () => { try { await result.current.sendMessage("steer now"); } catch (reason) { failure = reason; } });
+    expect(failure).toEqual(expect.objectContaining({ message: "Steer acknowledgement failed" }));
+    expect(result.current.messages).toEqual(expect.arrayContaining([expect.objectContaining({ role: "user", parts: [{ type: "text", text: "steer now" }] })]));
+  });
+
   it("focuses a newly created agent with its greeting already hydrated", async () => {
     let created = false;
     const client: CloudAgentsClient = {

@@ -1,4 +1,4 @@
-import { Loader2, X } from "lucide-react";
+import { Loader2, Minimize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CloudComputerSession } from "@/domain/types";
@@ -56,7 +56,7 @@ export function VncSurface({ session, viewOnly, compact = false, onReconnect, on
 
 export function VncDesktop({ session, failure, onClose, onReconnect }: { session?: CloudComputerSession; failure?: string; onClose(): void; onReconnect(): void }) {
   return createPortal(<div className="vnc-desktop" role="dialog" aria-label="Cloud computer">
-    <button className="vnc-close" aria-label="Close cloud computer" onClick={onClose}><X size={18} /></button>
+    <button className="vnc-close" aria-label="Minimize cloud computer" onClick={onClose}><Minimize2 size={18} /></button>
     {session ? <VncSurface session={session} viewOnly={false} onReconnect={onReconnect} /> : <div className="vnc-viewport"><div className="vnc-status" role="status">{failure ? <><span>{failure}</span><button className="secondary-button" onClick={onReconnect}>Reconnect</button></> : <><Loader2 size={18} className="spin" /> Connecting…</>}</div></div>}
   </div>, document.body);
 }
