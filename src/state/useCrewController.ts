@@ -109,6 +109,22 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     return () => { alive = false; controller.abort(); };
   }, [client, enabled, revalidateVersion, selectedAgentId]);
   useEffect(() => {
+    if (!enabled || !selectedAgentId || computer?.status === "online") return;
+    let active = true;
+    const refreshComputer = async () => {
+      try {
+        const nextComputer = await client.getComputer(selectedAgentId);
+        if (!active || selectedAgentIdRef.current !== selectedAgentId) return;
+        setComputer(nextComputer);
+        const snapshot = snapshots.current.get(selectedAgentId);
+        snapshots.current.set(selectedAgentId, { messages: snapshot?.messages ?? [], approvals: snapshot?.approvals ?? [], computer: nextComputer, cachedAt: Date.now() });
+      } catch { /* Availability errors remain represented by the normal connection state. */ }
+    };
+    const timer = window.setInterval(() => { void refreshComputer(); }, 2_000);
+    void refreshComputer();
+    return () => { active = false; window.clearInterval(timer); };
+  }, [client, computer?.status, enabled, selectedAgentId]);
+  useEffect(() => {
     if (!enabled || !conversationId || liveAgentId !== selectedAgentId) return; let active = true;
     const updateMessages = (updater: (current: Message[]) => Message[]) => setMessages((current) => {
       const next = updater(current); const snapshot = snapshots.current.get(selectedAgentId);

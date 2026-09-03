@@ -167,6 +167,18 @@ describe("useCrewController", () => {
     expect(result.current.agents.find((item) => item.id === "new-agent")?.lastMessagePreview).toBe("I am Atlas.");
   });
 
+  it("keeps checking computer readiness until VNC becomes available", async () => {
+    const getComputer = vi.fn(async (id: string) => ({ id, agentId: id, runtimeName: id, status: getComputer.mock.calls.length > 1 ? "online" as const : "offline" as const, capabilities: ["open" as const] }));
+    const client: CloudAgentsClient = {
+      listModelProviders: async () => ({ organizationId: "org-test", providers: [] }), listAgents: async () => [agent("atlas", "Atlas")],
+      getAgent: async (id) => agent(id, id), createAgent: async () => agent("new", "New"), updateAgent: async (id) => agent(id, id), deleteAgent: async () => undefined, duplicateAgent: async (id) => agent(`${id}-copy`, id), setAgentUnread: async (id) => agent(id, id),
+      listConversations: async () => [], getConversation: async () => { throw new Error("unused"); }, sendMessage: async () => { throw new Error("unused"); }, subscribeToConversationEvents: () => ({ unsubscribe: () => undefined }), listApprovalRequests: async () => [], respondToApproval: async () => { throw new Error("unused"); }, getComputer, openComputer: async () => ({ mode: "remote", url: "https://example.test", protocols: ["binary", "vnc-ticket.test"] }), takeOverComputer: async () => ({ mode: "remote", url: "https://example.test", protocols: ["binary", "vnc-ticket.test"] }), reconnect: async () => undefined,
+    };
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.computer?.status).toBe("online"));
+    expect(getComputer.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("removes a deleted agent immediately and rolls back when deletion fails", async () => {
     let rejectDelete!: (reason: Error) => void;
     const pendingDelete = new Promise<void>((_resolve, reject) => { rejectDelete = reject; });
