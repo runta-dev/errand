@@ -13,7 +13,7 @@ const settingsFile = () => join(app.getPath("userData"), "settings.json");
 const defaultSettings: AppSettings = { endpoint: DEFAULT_RUNTA_API_URL, dashboardUrl: DEFAULT_RUNTA_DASHBOARD_URL, theme: "light", notifications: true };
 let settings: AppSettings = defaultSettings;
 let authorizationStatus: DeviceAuthorizationStatus = "idle";
-const selectedAttachmentPaths = new Map<string, string>();
+const selectedAttachments = new Map<string, { path: string } | { name: string; mediaType: string; base64: string }>();
 const cloudStreams = new Map<string, AbortController>();
 const cloudStreamSenders = new Set<number>();
 let mainWindow: BrowserWindow | undefined;
@@ -245,16 +245,29 @@ ipcMain.handle("attachments:choose", async () => {
   const attachments = result.filePaths.flatMap((path) => {
     const size = statSync(path).size;
     if (size > 25 * 1024 * 1024) return [];
-    const id = randomUUID(); selectedAttachmentPaths.set(id, path);
+    const id = randomUUID(); selectedAttachments.set(id, { path });
     return [{ id, name: basename(path), size, mediaType: mediaTypeForPath(path) }];
   });
   if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB." });
   return attachments;
 });
+ipcMain.handle("attachments:addImage", (_event, value: { name?: unknown; mediaType?: unknown; base64?: unknown }) => {
+  const name = typeof value?.name === "string" ? basename(value.name).slice(0, 255) : "";
+  const mediaType = typeof value?.mediaType === "string" ? value.mediaType : "";
+  const base64 = typeof value?.base64 === "string" ? value.base64 : "";
+  if (!name || !/^image\/(?:gif|jpeg|png|webp)$/i.test(mediaType) || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Clipboard image is invalid");
+  const size = Buffer.byteLength(base64, "base64");
+  if (size <= 0 || size > 25 * 1024 * 1024) throw new Error("Clipboard image exceeds 25 MB");
+  const id = randomUUID(); selectedAttachments.set(id, { name, mediaType, base64 });
+  return { id, name, mediaType, size };
+});
 ipcMain.handle("attachments:read", (_event, id: unknown) => {
   if (typeof id !== "string") throw new Error("Attachment ID is invalid");
-  const path = selectedAttachmentPaths.get(id);
-  if (!path || !existsSync(path)) throw new Error("Attachment is no longer available");
+  const selected = selectedAttachments.get(id);
+  if (!selected) throw new Error("Attachment is no longer available");
+  if (!("path" in selected)) return { name: selected.name, mediaType: selected.mediaType, base64: selected.base64 };
+  const { path } = selected;
+  if (!existsSync(path)) throw new Error("Attachment is no longer available");
   const size = statSync(path).size;
   if (size > 25 * 1024 * 1024) throw new Error("Attachment exceeds 25 MB");
   return { name: basename(path), mediaType: mediaTypeForPath(path), base64: readFileSync(path).toString("base64") };

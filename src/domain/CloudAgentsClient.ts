@@ -1,4 +1,4 @@
-import type { Agent, ApprovalRequest, CloudComputer, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderCatalog, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
+import type { Agent, ApprovalRequest, CloudComputer, CloudComputerSession, Conversation, ConversationEvent, CreateAgentInput, Message, ModelProviderCatalog, RespondApprovalInput, SendMessageInput, Subscription, UpdateAgentInput } from "./types";
 
 export interface CloudAgentsClient {
   listModelProviders(signal?: AbortSignal): Promise<ModelProviderCatalog>;
@@ -16,7 +16,7 @@ export interface CloudAgentsClient {
   listApprovalRequests(agentId?: string, signal?: AbortSignal): Promise<ApprovalRequest[]>;
   respondToApproval(input: RespondApprovalInput, signal?: AbortSignal): Promise<ApprovalRequest>;
   getComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputer>;
-  openComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
-  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<{ url: string; mode: "remote" }>;
+  openComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputerSession>;
+  takeOverComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputerSession>;
   reconnect(signal?: AbortSignal): Promise<void>;
 }

@@ -29,7 +29,7 @@ const bridge: DesktopBridge = {
       return () => { ipcRenderer.removeListener("cloud:stream:event", handler); ipcRenderer.send("cloud:stream:unsubscribe", subscriptionId); };
     },
   },
-  attachments: { choose: () => ipcRenderer.invoke("attachments:choose"), read: (id) => ipcRenderer.invoke("attachments:read", id) },
+  attachments: { choose: () => ipcRenderer.invoke("attachments:choose"), addImage: (image) => ipcRenderer.invoke("attachments:addImage", image), read: (id) => ipcRenderer.invoke("attachments:read", id) },
   notifications: {
     show: (notification) => ipcRenderer.invoke("notifications:show", notification),
     setBadge: (count) => ipcRenderer.invoke("notifications:setBadge", count),

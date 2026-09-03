@@ -59,7 +59,7 @@ describe("Runta Crew authentication surfaces", () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async (url) => { opened.push(url); },
       settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [], read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
+      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
     };
@@ -120,7 +120,7 @@ describe("Runta Crew authentication surfaces", () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
       settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [], read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
+      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
       cloud: { request: cloudRequest, subscribe: () => () => undefined },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
@@ -140,7 +140,7 @@ describe("Runta Crew authentication surfaces", () => {
       settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false },
       auth: { start: async () => { throw new Error("Error invoking remote method 'auth:start': Error: Device authorization failed (401)"); }, status: async () => "error", logout: async () => true },
-      attachments: { choose: async () => [], read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
+      attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
     };
     window.runtaCrew = bridge;
     const user = userEvent.setup(); render(<App />);

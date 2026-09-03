@@ -7,6 +7,14 @@ import type { ConversationEvent } from "@/domain/types";
 afterEach(() => { delete window.runtaCrew; });
 
 describe("RuntaCloudAgentsClient", () => {
+  it("creates an authenticated VNC session with the server-provided websocket protocols", async () => {
+    const request = vi.fn(async () => ({ status: 201, body: { channels: { vnc: { websocket_url: "wss://vnc.example.test/", protocols: ["binary", "vnc-ticket.ticket"] } } } }));
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined } } as unknown as DesktopBridge;
+
+    await expect(new RuntaCloudAgentsClient().openComputer("agent/one")).resolves.toEqual({ url: "wss://vnc.example.test/", protocols: ["binary", "vnc-ticket.ticket"], mode: "remote" });
+    expect(request).toHaveBeenCalledWith({ method: "POST", path: "/v2/agents/agent%2Fone/computer-sessions" });
+  });
+
   it("maps a missing local token to a normal authentication error", async () => {
     window.runtaCrew = { cloud: { request: async () => { throw new Error("Error invoking remote method 'cloud:request': Error: Runta API token is not configured"); }, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
     await expect(new RuntaCloudAgentsClient().listAgents()).rejects.toMatchObject({ code: "unauthorized", message: "Authentication is required" });
@@ -38,7 +46,7 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
     expect(await client.createAgent({ name: "Reviewer", modelProviderId: "provider-1" })).toEqual(expect.objectContaining({ id: "agent-2", status: "idle" }));
     expect(await client.updateAgent("agent-1", { name: "Atlas" })).toEqual(expect.objectContaining({ id: "agent-1", name: "Atlas" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("Do not proactively mention any underlying model, provider, Pi, harness, runtime, or implementation details"), initial_message: expect.stringContaining("Hi, I'm Reviewer."), model_provider: { type: "managed", id: "provider-1" } }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("Do not use emoji unless the user explicitly asks for them."), initial_message: expect.stringContaining("Hi, I'm Reviewer."), model_provider: { type: "managed", id: "provider-1" } }) }));
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
 
@@ -52,7 +60,7 @@ describe("RuntaCloudAgentsClient", () => {
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledWith("/v2/agents/agent-1/runs/run-1/events?after=-1", expect.any(Function)));
     streamListener?.({ event: "pi.event", id: "4", data: { type: "message_update", message: { id: "assistant-1" }, assistantMessageEvent: { type: "text_delta", delta: "Checking." } } });
     streamListener?.({ event: "pi.event", id: "5", data: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" } } });
-    streamListener?.({ event: "pi.event", id: "6", data: { type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" }, isError: false } });
+    streamListener?.({ event: "pi.event", id: "6", data: { type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" }, result: { content: [{ type: "text", text: "README contents" }] }, isError: false } });
     streamListener?.({ event: "pi.event", id: "7", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: "Hi" } } });
     streamListener?.({ event: "pi.event", id: "8", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: " there" } } });
     streamListener?.({ event: "run.status", id: "status:finished", data: { id: "run-1", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "Hi there", error: null } });
@@ -60,8 +68,8 @@ describe("RuntaCloudAgentsClient", () => {
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-1", notify: false });
     expect(events).toContainEqual({ type: "message.created", message: expect.objectContaining({ id: "run-1:agent:assistant-2", parts: [{ type: "text", text: "Hi" }], streaming: true }) });
     expect(events).toContainEqual({ type: "message.delta", messageId: "run-1:agent:assistant-2", delta: " there" });
-    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "Reading file", kind: "file", status: "running" }) });
-    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "Reading file", kind: "file", status: "completed" }) });
+    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "read README.md", kind: "file", status: "running" }) });
+    expect(events).toContainEqual({ type: "activity.updated", activity: expect.objectContaining({ id: "tool:tool-1", title: "read README.md", output: "README contents", kind: "file", status: "completed" }) });
     expect(events).not.toContainEqual(expect.objectContaining({ type: "message.updated", message: expect.objectContaining({ id: "run-1:agent" }) }));
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-2", notify: true });
     subscription.unsubscribe();
@@ -109,6 +117,20 @@ describe("RuntaCloudAgentsClient", () => {
     await client.sendMessage({ conversationId: "conversation-agent-1", text: "Steer" });
     expect(request).toHaveBeenCalledWith({ method: "POST", path: "/v2/agents/agent-1/runs/run-new/follow-ups", body: { prompt: "Steer" } });
     subscription.unsubscribe();
+  });
+
+  it("uploads an image to the workspace and sends it as native prompt input", async () => {
+    const request = vi.fn(async ({ method, path }: CloudRequest) => {
+      if (method === "PUT" && path === "/v2/agents/agent-1/workspace/files") return { status: 200, body: { path: ".runta-crew/attachments/image.png", size: 3 } };
+      if (method === "GET") return { status: 200, body: [] };
+      return { status: 201, body: { id: "run-image", agent_id: "agent-1", status: "pending", prompt: "Describe it", result: null, error: null } };
+    });
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined }, attachments: { choose: async () => [], addImage: async () => ({ id: "unused", name: "unused.png", size: 3, mediaType: "image/png" }), read: async (id: string) => id === "image-1" ? ({ name: "image.png", mediaType: "image/png", base64: "YWJj" }) : ({ name: "second.jpg", mediaType: "image/jpeg", base64: "ZGVm" }) } } as unknown as DesktopBridge;
+
+    await new RuntaCloudAgentsClient().sendMessage({ conversationId: "conversation-agent-1", text: "Compare them", attachments: [{ id: "image-1", name: "image.png", size: 3, mediaType: "image/png", source: "local-selection" }, { id: "image-2", name: "second.jpg", size: 3, mediaType: "image/jpeg", source: "local-selection" }] });
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "PUT", path: "/v2/agents/agent-1/workspace/files", body: expect.objectContaining({ content_base64: "YWJj" }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents/agent-1/runs", body: expect.objectContaining({ prompt: expect.stringContaining("Compare them"), images: [{ type: "image", data: "YWJj", mime_type: "image/png" }, { type: "image", data: "ZGVm", mime_type: "image/jpeg" }] }) }));
   });
 
   it("establishes an initial run baseline without duplicating loaded history", async () => {

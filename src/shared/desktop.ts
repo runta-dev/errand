@@ -16,7 +16,7 @@ export interface DesktopBridge {
   credentials: { has(): Promise<boolean>; set(token: string | null): Promise<boolean> };
   auth?: { start(): Promise<DeviceAuthorizationStart>; status(): Promise<DeviceAuthorizationStatus>; logout(): Promise<boolean> };
   cloud?: { request(request: CloudRequest): Promise<CloudResponse>; subscribe(path: string, listener: (event: CloudStreamEvent) => void): () => void };
-  attachments: { choose(): Promise<SelectedAttachment[]>; read(id: string): Promise<AttachmentContent> };
+  attachments: { choose(): Promise<SelectedAttachment[]>; addImage(image: AttachmentContent): Promise<SelectedAttachment>; read(id: string): Promise<AttachmentContent> };
   notifications: { show(notification: DesktopNotification): Promise<boolean>; setBadge(count: number): Promise<void> };
   deepLinks: { onOpenAgent(listener: (agentId: string) => void): () => void };
 }

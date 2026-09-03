@@ -22,6 +22,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.5.0",
     "@vitejs/plugin-react": "^5.0.4",
     "boring-avatars": "^2.0.4",
     "clsx": "^2.1.1",

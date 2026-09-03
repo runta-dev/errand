@@ -1,11 +1,12 @@
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type Attachment, type CloudComputer, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
+import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type Attachment, type CloudComputer, type CloudComputerSession, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
 import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
 interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
+interface RuntaComputerSession { channels: { vnc: { websocket_url: string; protocols: string[] } } }
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
@@ -19,7 +20,7 @@ const LEGACY_INITIAL_MESSAGE = "Introduce yourself briefly to the user. Do not u
 const LEGACY_IDENTITY_INITIAL_MESSAGE = "Introduce yourself briefly using only the Runta Crew identity and name from your system instructions. Do not mention any model, provider, Pi, harness, runtime, or implementation details. Do not use tools or ask a question.";
 const INITIAL_MESSAGE_PREFIX = "[Runta Crew bootstrap] ";
 const initialMessage = (name: string) => `${INITIAL_MESSAGE_PREFIX}Introduce yourself briefly as ${JSON.stringify(name)}, the user's Runta Crew agent. Begin with ${JSON.stringify(`Hi, I'm ${name}.`)} Do not mention any model, provider, Pi, harness, runtime, or implementation details. Do not use tools or ask a question.`;
-const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Introduce yourself by this name. Help with coding, research, files, and computer tasks. Be concise, practical, and honest about unavailable capabilities. Do not proactively mention any underlying model, provider, Pi, harness, runtime, or implementation details; if the user explicitly asks, answer honestly.`;
+const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Introduce yourself by this name. Help with coding, research, files, and computer tasks. Be concise, practical, and honest about unavailable capabilities. Do not use emoji unless the user explicitly asks for them. Do not proactively mention any underlying model, provider, Pi, harness, runtime, or implementation details; if the user explicitly asks, answer honestly.`;
 const isInitialMessage = (prompt: string | null | undefined) => prompt === LEGACY_INITIAL_MESSAGE || prompt === LEGACY_IDENTITY_INITIAL_MESSAGE || prompt?.startsWith(INITIAL_MESSAGE_PREFIX) === true;
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
@@ -31,15 +32,12 @@ function toolActivityKind(value: string): ActivityEvent["kind"] {
   if (/agent|task|handoff/.test(normalized)) return "handoff";
   return "status";
 }
-function toolActivityTitle(value: string): string {
-  const normalized = value.toLowerCase();
-  if (/read|cat|view/.test(normalized)) return "Reading file";
-  if (/write|edit|patch|create/.test(normalized)) return "Editing file";
-  if (/search|grep|glob|find/.test(normalized)) return "Searching files";
-  if (/terminal|command|shell|bash|exec|run/.test(normalized)) return "Running command";
-  if (/browser|web|fetch|url/.test(normalized)) return "Browsing web";
-  if (/agent|task|handoff/.test(normalized)) return "Running agent";
-  return value.trim() || "Working";
+function toolResultText(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return typeof value === "string" ? value : undefined;
+  const content = (value as { content?: unknown }).content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content.flatMap((part) => part && typeof part === "object" && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string" ? [(part as { text: string }).text] : []).join("\n").trim();
+  return text || undefined;
 }
 function runMessages(run: RuntaRun, id: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
@@ -65,9 +63,9 @@ function activityFromPiEvent(value: Record<string, unknown>, conversationIdValue
   const args = value.args && typeof value.args === "object" ? value.args as Record<string, unknown> : {};
   const subject = stringValue(args.path) ?? stringValue(args.file_path) ?? (name === "bash" ? stringValue(args.command) : undefined);
   const rawTitle = subject ? `${name === "bash" ? "" : `${name} `}${subject}` : name;
-  const title = toolActivityTitle(rawTitle.slice(0, 160)); const timestamp = new Date().toISOString();
+  const title = rawTitle.slice(0, 500); const timestamp = new Date().toISOString();
   const status: ActivityEvent["status"] = value.type === "tool_execution_end" ? value.isError === true ? "failed" : "completed" : "running";
-  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(name), title, detail: rawTitle, status, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp };
+  return { id: `tool:${id}`, conversationId: conversationIdValue, kind: toolActivityKind(name), title, detail: rawTitle, output: toolResultText(value.result) ?? previous?.output, status, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp };
 }
 
 async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
@@ -234,13 +232,24 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     return { conversation: { id, agentId, title: "Agent conversation", updatedAt: runs[0]?.updated_at ?? new Date().toISOString() }, messages };
   }
   async sendMessage(input: SendMessageInput): Promise<Message> {
-    if (input.attachments?.length) throw new CrewError("contract_pending", "Cloud attachment upload is not available yet");
     const agentId = agentIdFromConversation(input.conversationId);
+    const prepared = await Promise.all((input.attachments ?? []).map(async (attachment) => {
+      if (attachment.source !== "local-selection") throw new CrewError("contract_pending", "Only local attachments can be sent");
+      const content = await window.runtaCrew?.attachments.read(attachment.id); if (!content) throw new CrewError("unknown", "Attachment is no longer available");
+      const safeName = content.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment";
+      const path = `.runta-crew/attachments/${crypto.randomUUID()}-${safeName}`;
+      await this.request({ method: "PUT", path: `/v2/agents/${encodeURIComponent(agentId)}/workspace/files`, body: { path, content_base64: content.base64 } });
+      const image = /^image\/(?:gif|jpeg|png|webp)$/i.test(content.mediaType) ? { type: "image" as const, data: content.base64, mime_type: content.mediaType } : undefined;
+      return { path, image };
+    }));
+    const uploadedPaths = prepared.map(({ path }) => path); const preparedImages = prepared.flatMap(({ image }) => image ? [image] : []);
+    const attachmentNote = uploadedPaths.length ? `\n\nAttached files are available in the workspace:\n${uploadedPaths.map((path) => `- ${path}`).join("\n")}` : "";
+    const prompt = `${input.text.trim() || "Please review the attached file(s)."}${attachmentNote}`;
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=1` });
     const latest = runs[0];
-    const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt: input.text } });
+    const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt, ...(preparedImages.length ? { images: preparedImages } : {}) } });
     for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();
-    return { id: `${run.id}:user:${crypto.randomUUID()}`, conversationId: input.conversationId, role: "user", parts: [{ type: "text", text: input.text }], createdAt: new Date().toISOString() };
+    return { id: `${run.id}:user:${crypto.randomUUID()}`, conversationId: input.conversationId, role: "user", parts: [...(input.text ? [{ type: "text" as const, text: input.text }] : []), ...(input.attachments ?? []).map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt: new Date().toISOString() };
   }
   subscribeToConversationEvents(id: string, listener: (event: ConversationEvent) => void): Subscription {
     const agentId = agentIdFromConversation(id);
@@ -331,7 +340,11 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }
   async getComputer(agentId: string, signal?: AbortSignal): Promise<CloudComputer> { const agent = await this.getAgent(agentId, signal); return { id: agent.computerId, agentId, runtimeName: agent.computerId, status: agent.status === "offline" ? "offline" : "online", capabilities: ["open", "takeover"] }; }
-  async openComputer(_agentId: string, _signal?: AbortSignal): Promise<{ url: string; mode: "remote" }> { void _agentId; void _signal; throw new CrewError("contract_pending", "Computer sessions are outside the current Crew scope"); }
+  async openComputer(agentId: string, _signal?: AbortSignal): Promise<CloudComputerSession> {
+    void _signal;
+    const session = await this.request<RuntaComputerSession>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/computer-sessions` });
+    return { url: session.channels.vnc.websocket_url, protocols: session.channels.vnc.protocols, mode: "remote" };
+  }
   async takeOverComputer(agentId: string, signal?: AbortSignal) { return this.openComputer(agentId, signal); }
   async reconnect(signal?: AbortSignal) { await this.listAgents(signal); }
   getActivities(_conversationId: string) { void _conversationId; return []; }

@@ -13,6 +13,20 @@ describe("Conversation states", () => {
     expect(container.querySelector(".agent-markdown")).not.toHaveTextContent("**");
   });
 
+  it("keeps code copy controls inside the code block chrome", async () => {
+    const message: Message = { id: "agent-code", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "```bash\necho hello\n```" }], createdAt: new Date().toISOString() };
+    const { container } = render(<MessageView message={message} activities={[]} />);
+    const copyButton = await screen.findByRole("button", { name: "Copy Code" });
+    const codeBlock = container.querySelector<HTMLElement>('[data-streamdown="code-block"]');
+    const actions = container.querySelector<HTMLElement>('[data-streamdown="code-block-actions"]');
+
+    expect(codeBlock).toBeInTheDocument();
+    expect(actions).toContainElement(copyButton);
+    expect(codeBlock).toContainElement(actions);
+    expect(codeBlock).toHaveTextContent("bash");
+    expect(codeBlock).toHaveTextContent("echo hello");
+  });
+
   it("lets long Markdown tables expand without overlapping following content", async () => {
     const message: Message = { id: "agent-table", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "| Date | News |\n| --- | --- |\n| Aug 13, 2026 | A very long update that must wrap inside the table cell instead of escaping the table layout. |\n| Aug 5, 2026 | Another long update. |\n\nSources: [Runta Blog](https://runta.com/blog)\n\nWant me to dig deeper?" }], createdAt: new Date().toISOString() };
     const { container } = render(<MessageView message={message} activities={[]} />);
@@ -134,6 +148,19 @@ describe("Conversation states", () => {
     expect(onSend).toHaveBeenCalledWith("你好", []);
   });
 
+  it("adds a pasted image to the composer", async () => {
+    const addImage = vi.fn(async () => ({ id: "pasted-1", name: "pasted.png", size: 3, mediaType: "image/png" }));
+    window.runtaCrew = { attachments: { choose: async () => [], addImage, read: async () => ({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }) } } as unknown as typeof window.runtaCrew;
+    render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
+    const composer = screen.getByRole("textbox", { name: "Message Atlas" });
+    const image = new File([Uint8Array.from([97, 98, 99])], "pasted.png", { type: "image/png" });
+
+    fireEvent.paste(composer, { clipboardData: { files: [], items: [{ kind: "file", type: "image/png", getAsFile: () => image }] } });
+
+    expect(await screen.findByText("pasted.png")).toBeInTheDocument();
+    expect(addImage).toHaveBeenCalledWith(expect.objectContaining({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }));
+  });
+
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);
@@ -163,12 +190,12 @@ describe("Conversation states", () => {
 
   it("shows elapsed working time and expandable tool details", () => {
     const message: Message = { id: "run-timer:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date(Date.now() - 65_000).toISOString(), streaming: true };
-    render(<MessageView message={message} activities={[{ id: "tool:install", conversationId: message.conversationId, kind: "terminal", title: "Installing Chromium", detail: "Package installation", status: "running", createdAt: message.createdAt }]} />);
+    render(<MessageView message={message} activities={[{ id: "tool:install", conversationId: message.conversationId, kind: "terminal", title: "apt-get install chromium", detail: "apt-get install chromium", output: "Chromium installed", status: "completed", createdAt: message.createdAt }]} />);
 
-    expect(screen.getByText("1m 5s")).toBeInTheDocument();
-    expect(screen.getByText("Installing Chromium")).toBeInTheDocument();
-    expect(screen.getByText("Package installation")).toBeInTheDocument();
-    const summary = screen.getByRole("status", { name: "Agent is working: Installing Chromium" });
+    expect(screen.getByText("Working for 1m 5s")).toBeInTheDocument();
+    expect(screen.getByText("apt-get install chromium")).toBeInTheDocument();
+    expect(screen.getByText("Chromium installed")).toBeInTheDocument();
+    const summary = screen.getByRole("status", { name: "Agent is working: apt-get install chromium" });
     expect(summary.closest("details")).not.toHaveAttribute("open");
     fireEvent.click(summary);
     expect(summary.closest("details")).toHaveAttribute("open");
@@ -183,18 +210,19 @@ describe("Conversation states", () => {
     expect(await screen.findByRole("dialog", { name: "Preview report.txt" })).toHaveTextContent("hello preview");
   });
 
-  it("animates a user entry and the final agent response at their actual state transitions", () => {
+  it("animates a user entry with CSS and the final agent response at its state transition", () => {
     const animate = vi.fn(); const originalAnimate = HTMLElement.prototype.animate;
     Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate });
     try {
       const user: Message = { id: "optimistic-user:1", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "Hello" }], createdAt: new Date().toISOString() };
-      render(<MessageView message={user} activities={[]} entering />);
-      expect(animate).toHaveBeenCalledTimes(1);
+      const { container: userContainer } = render(<MessageView message={user} activities={[]} entering />);
+      expect(userContainer.firstElementChild).toHaveClass("message-entering");
+      expect(animate).not.toHaveBeenCalled();
 
       const streaming: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
       const { rerender } = render(<MessageView message={streaming} activities={[]} />);
       rerender(<MessageView message={{ ...streaming, parts: [{ type: "text", text: "Done" }], streaming: false }} activities={[]} />);
-      expect(animate).toHaveBeenCalledTimes(2);
+      expect(animate).toHaveBeenCalledTimes(1);
     } finally {
       Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: originalAnimate });
     }

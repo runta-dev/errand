@@ -14,9 +14,10 @@ export type MessagePart = TextPart | ActivityPart | AttachmentPart;
 export interface Message { id: string; conversationId: string; role: MessageRole; parts: MessagePart[]; createdAt: string; streaming?: boolean }
 export interface Conversation { id: string; agentId: string; title: string; updatedAt: string }
 export type ActivityStatus = "running" | "completed" | "failed";
-export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; status: ActivityStatus; createdAt: string; updatedAt?: string }
+export interface ActivityEvent { id: string; conversationId: string; kind: "browser" | "terminal" | "file" | "handoff" | "status"; title: string; detail: string; output?: string; status: ActivityStatus; createdAt: string; updatedAt?: string }
 export interface ApprovalRequest { id: string; agentId: string; conversationId: string; title: string; description: string; scope: string[]; status: "pending" | "allowed" | "denied"; createdAt: string; responseNote?: string }
 export interface CloudComputer { id: string; agentId: string; runtimeName: string; status: "online" | "starting" | "offline"; activeApp?: string; previewUrl?: string; capabilities: Array<"open" | "takeover"> }
+export interface CloudComputerSession { url: string; protocols: string[]; mode: "remote" }
 export interface ModelProviderOption { id: string; name: string; protocol: string; defaultModel?: string }
 export interface ModelProviderCatalog { organizationId: string; providers: ModelProviderOption[] }
 export interface CreateAgentInput { name: string; modelProviderId: string }
