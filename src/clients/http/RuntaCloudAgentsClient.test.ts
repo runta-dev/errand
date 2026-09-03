@@ -97,7 +97,7 @@ describe("RuntaCloudAgentsClient", () => {
   });
 
   it("replays historical assistant messages by ACP message id instead of the aggregated run result", async () => {
-    const request = vi.fn(async () => ({ status: 200, body: [{
+    const request = vi.fn(async ({ path }: CloudRequest) => path.includes("/artifacts?") ? { status: 200, body: [{ id: "artifact-1", run_id: "run-history", name: "chart.png", media_type: "image/png", size: 42 }] } : ({ status: 200, body: [{
       id: "run-history", agent_id: "agent-1", status: "finished", prompt: "Research it",
       result: "Checking.Browsing.Done with a giant aggregate", error: null,
       created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z",
@@ -119,7 +119,7 @@ describe("RuntaCloudAgentsClient", () => {
 
     expect(result.messages).toEqual([
       expect.objectContaining({ id: "run-history:user", role: "user", parts: [{ type: "text", text: "Research it" }] }),
-      expect.objectContaining({ id: "run-history:agent:assistant-2", role: "agent", parts: [{ type: "text", text: "Done now." }], streaming: false }),
+      expect.objectContaining({ id: "run-history:agent:assistant-2", role: "agent", parts: [{ type: "text", text: "Done now." }, { type: "attachment", attachment: { id: "artifact-1", name: "chart.png", size: 42, mediaType: "image/png", source: "cloud", agentId: "agent-1" } }], streaming: false }),
     ]);
     expect(JSON.stringify(result.messages)).not.toContain("Checking.");
     expect(JSON.stringify(result.messages)).not.toContain("giant aggregate");
