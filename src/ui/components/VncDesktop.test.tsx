@@ -13,8 +13,15 @@ vi.mock("@novnc/novnc/lib/rfb.js", () => ({
 }));
 
 import { VncDesktop } from "./VncDesktop";
+import { canvasHasVisualFrame } from "./vncFrame";
 
 beforeEach(() => { instances.splice(0); constructor.mockClear(); });
+
+it("does not treat noVNC's uniform placeholder canvas as a video frame", () => {
+  const canvas = (pixels: number[][]) => ({ width: 100, height: 100, getContext: () => ({ getImageData: () => ({ data: pixels.shift() ?? [255, 255, 255, 255] }) }) }) as unknown as HTMLCanvasElement;
+  expect(canvasHasVisualFrame(canvas(Array(9).fill([255, 255, 255, 255])))).toBe(false);
+  expect(canvasHasVisualFrame(canvas([[255, 80, 20, 255], ...Array(8).fill([20, 20, 20, 255])]))).toBe(true);
+});
 
 it("connects noVNC with the API websocket URL and subprotocols", async () => {
   const reconnect = vi.fn();
@@ -49,7 +56,8 @@ it("waits for a framebuffer before treating VNC as ready", async () => {
     await vi.waitFor(() => expect(instances).toHaveLength(1));
     act(() => instances[0].dispatchEvent(new CustomEvent("connect")));
     expect(screen.getByRole("status")).toHaveTextContent("Connecting…");
-    getImageData.mockReturnValue({ data: Uint8ClampedArray.from([0, 0, 0, 255]) });
+    let sample = 0;
+    getImageData.mockImplementation(() => ({ data: Uint8ClampedArray.from(sample++ % 2 === 0 ? [240, 90, 20, 255] : [20, 20, 20, 255]) }));
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   } finally { getContext.mockRestore(); vi.useRealTimers(); }
