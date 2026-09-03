@@ -108,6 +108,29 @@ describe("Conversation states", () => {
     expect(composer).toHaveFocus();
   });
 
+  it("does not submit when Enter confirms an IME composition", () => {
+    const onSend = vi.fn(async () => undefined);
+    render(<Conversation agent={agent} messages={[]} activities={[]} onSend={onSend} onToggleDetails={() => undefined} />);
+    const composer = screen.getByRole("textbox", { name: "Message Atlas" });
+    fireEvent.change(composer, { target: { value: "你好" } });
+
+    fireEvent.keyDown(composer, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(composer, { key: "Enter", keyCode: 229 });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(composer).toHaveValue("你好");
+  });
+
+  it("submits with Enter after IME composition ends", () => {
+    const onSend = vi.fn(async () => undefined);
+    render(<Conversation agent={agent} messages={[]} activities={[]} onSend={onSend} onToggleDetails={() => undefined} />);
+    const composer = screen.getByRole("textbox", { name: "Message Atlas" });
+    fireEvent.change(composer, { target: { value: "你好" } });
+    fireEvent.keyDown(composer, { key: "Enter", isComposing: false, keyCode: 13 });
+
+    expect(onSend).toHaveBeenCalledWith("你好", []);
+  });
+
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);
