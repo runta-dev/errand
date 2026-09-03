@@ -92,6 +92,17 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
   });
 
+  it("does not expose workspace attachment context in replayed user messages", async () => {
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "image-run", agent_id: "agent-1", status: "finished", prompt: "Compare these images\n\n[Runta Crew attachment context]\n- .runta-crew/attachments/one.png\n- .runta-crew/attachments/two.png", result: "They differ.", error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => { queueMicrotask(() => listener({ event: "stream.closed" })); return () => undefined; };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const conversation = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(conversation.messages[0]).toEqual(expect.objectContaining({ role: "user", parts: [{ type: "text", text: "Compare these images" }] }));
+    expect(JSON.stringify(conversation.messages)).not.toContain(".runta-crew/attachments");
+  });
+
   it("waits for the complete initial Agent reply before focusing", async () => {
     const request = vi.fn(async () => ({ status: 200, body: [{ id: "greeting-run", agent_id: "agent-1", status: "finished", result: "I am Atlas." }] }));
     window.runtaCrew = { cloud: { request, subscribe: () => () => undefined }, settings: {} as DesktopBridge["settings"], credentials: {} as DesktopBridge["credentials"], attachments: {} as DesktopBridge["attachments"], notifications: {} as DesktopBridge["notifications"], deepLinks: {} as DesktopBridge["deepLinks"], getVersion: async () => "test", openExternal: async () => undefined };
@@ -119,9 +130,8 @@ describe("RuntaCloudAgentsClient", () => {
     subscription.unsubscribe();
   });
 
-  it("uploads an image to the workspace and sends it as native prompt input", async () => {
-    const request = vi.fn(async ({ method, path }: CloudRequest) => {
-      if (method === "PUT" && path === "/v2/agents/agent-1/workspace/files") return { status: 200, body: { path: ".runta-crew/attachments/image.png", size: 3 } };
+  it("sends multiple images as native prompt input without workspace upload", async () => {
+    const request = vi.fn(async ({ method }: CloudRequest) => {
       if (method === "GET") return { status: 200, body: [] };
       return { status: 201, body: { id: "run-image", agent_id: "agent-1", status: "pending", prompt: "Describe it", result: null, error: null } };
     });
@@ -129,7 +139,7 @@ describe("RuntaCloudAgentsClient", () => {
 
     await new RuntaCloudAgentsClient().sendMessage({ conversationId: "conversation-agent-1", text: "Compare them", attachments: [{ id: "image-1", name: "image.png", size: 3, mediaType: "image/png", source: "local-selection" }, { id: "image-2", name: "second.jpg", size: 3, mediaType: "image/jpeg", source: "local-selection" }] });
 
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "PUT", path: "/v2/agents/agent-1/workspace/files", body: expect.objectContaining({ content_base64: "YWJj" }) }));
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ method: "PUT" }));
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents/agent-1/runs", body: expect.objectContaining({ prompt: expect.stringContaining("Compare them"), images: [{ type: "image", data: "YWJj", mime_type: "image/png" }, { type: "image", data: "ZGVm", mime_type: "image/jpeg" }] }) }));
   });
 

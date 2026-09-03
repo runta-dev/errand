@@ -22,6 +22,13 @@ const INITIAL_MESSAGE_PREFIX = "[Runta Crew bootstrap] ";
 const initialMessage = (name: string) => `${INITIAL_MESSAGE_PREFIX}Introduce yourself briefly as ${JSON.stringify(name)}, the user's Runta Crew agent. Begin with ${JSON.stringify(`Hi, I'm ${name}.`)} Do not mention any model, provider, Pi, harness, runtime, or implementation details. Do not use tools or ask a question.`;
 const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Introduce yourself by this name. Help with coding, research, files, and computer tasks. Be concise, practical, and honest about unavailable capabilities. Do not use emoji unless the user explicitly asks for them. Do not proactively mention any underlying model, provider, Pi, harness, runtime, or implementation details; if the user explicitly asks, answer honestly.`;
 const isInitialMessage = (prompt: string | null | undefined) => prompt === LEGACY_INITIAL_MESSAGE || prompt === LEGACY_IDENTITY_INITIAL_MESSAGE || prompt?.startsWith(INITIAL_MESSAGE_PREFIX) === true;
+const visiblePrompt = (prompt: string | null | undefined) => {
+  if (!prompt) return "";
+  const legacyMarker = "\n\nAttached files are available in the workspace:\n";
+  const marker = "\n\n[Runta Crew attachment context]\n";
+  const value = prompt.split(prompt.includes(marker) ? marker : legacyMarker, 1)[0]?.trim() ?? "";
+  return value === "Please review the attached file(s)." ? "" : value;
+};
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function toolActivityKind(value: string): ActivityEvent["kind"] {
@@ -42,7 +49,7 @@ function toolResultText(value: unknown): string | undefined {
 function runMessages(run: RuntaRun, id: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
   const updatedAt = run.updated_at ?? createdAt;
-  const user = run.prompt && !isInitialMessage(run.prompt) ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: run.prompt }], createdAt }] : [];
+  const prompt = visiblePrompt(run.prompt); const user = prompt && !isInitialMessage(run.prompt) ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: prompt }], createdAt }] : [];
   if (run.status === "failed" || run.status === "cancelled") {
     const detail = run.error?.trim() || (run.status === "cancelled" ? "Run cancelled." : "Run failed.");
     return [...user, { id: `${run.id}:agent`, conversationId: id, role: "system", parts: [{ type: "text", text: detail }], createdAt: updatedAt }];
@@ -233,18 +240,13 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   }
   async sendMessage(input: SendMessageInput): Promise<Message> {
     const agentId = agentIdFromConversation(input.conversationId);
-    const prepared = await Promise.all((input.attachments ?? []).map(async (attachment) => {
+    const preparedImages = await Promise.all((input.attachments ?? []).map(async (attachment) => {
       if (attachment.source !== "local-selection") throw new CrewError("contract_pending", "Only local attachments can be sent");
       const content = await window.runtaCrew?.attachments.read(attachment.id); if (!content) throw new CrewError("unknown", "Attachment is no longer available");
-      const safeName = content.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment";
-      const path = `.runta-crew/attachments/${crypto.randomUUID()}-${safeName}`;
-      await this.request({ method: "PUT", path: `/v2/agents/${encodeURIComponent(agentId)}/workspace/files`, body: { path, content_base64: content.base64 } });
-      const image = /^image\/(?:gif|jpeg|png|webp)$/i.test(content.mediaType) ? { type: "image" as const, data: content.base64, mime_type: content.mediaType } : undefined;
-      return { path, image };
+      if (!/^image\/(?:gif|jpeg|png|webp)$/i.test(content.mediaType)) throw new CrewError("contract_pending", "This attachment type is not supported as native Agent input");
+      return { type: "image" as const, data: content.base64, mime_type: content.mediaType };
     }));
-    const uploadedPaths = prepared.map(({ path }) => path); const preparedImages = prepared.flatMap(({ image }) => image ? [image] : []);
-    const attachmentNote = uploadedPaths.length ? `\n\nAttached files are available in the workspace:\n${uploadedPaths.map((path) => `- ${path}`).join("\n")}` : "";
-    const prompt = `${input.text.trim() || "Please review the attached file(s)."}${attachmentNote}`;
+    const prompt = input.text.trim();
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=1` });
     const latest = runs[0];
     const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt, ...(preparedImages.length ? { images: preparedImages } : {}) } });
