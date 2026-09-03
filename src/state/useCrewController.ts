@@ -117,7 +117,15 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       if (!active) return;
       if (event.type === "message.created") {
         updateMessages((current) => {
-          let nextMessage = event.message; const knownVisualId = visualMessageIds.current.get(event.message.id);
+          let nextMessage = event.message; let knownVisualId = visualMessageIds.current.get(event.message.id);
+          if (!knownVisualId && event.message.role === "agent") {
+            const canonicalRunMessageId = event.message.id.replace(/:agent:.+$/, ":agent");
+            const canonicalVisualId = canonicalRunMessageId === event.message.id ? undefined : visualMessageIds.current.get(canonicalRunMessageId);
+            if (canonicalVisualId && current.some((message) => message.id === canonicalVisualId)) {
+              knownVisualId = canonicalVisualId;
+              visualMessageIds.current.set(event.message.id, canonicalVisualId);
+            }
+          }
           if (knownVisualId) nextMessage = { ...event.message, id: knownVisualId };
           if (event.message.role === "user" && sendingAgentIds.current.has(selectedAgentId)) {
             const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_USER_PREFIX) && messageText(message) === messageText(event.message));
@@ -134,6 +142,13 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
       if (event.type === "message.delta") {
         updateMessages((current) => {
           let visualId = visualMessageIds.current.get(event.messageId);
+          if (!visualId) {
+            const canonicalRunMessageId = event.messageId.replace(/:agent:.+$/, ":agent");
+            if (canonicalRunMessageId !== event.messageId) {
+              visualId = visualMessageIds.current.get(canonicalRunMessageId);
+              if (visualId) visualMessageIds.current.set(event.messageId, visualId);
+            }
+          }
           if (!visualId) { const claimedVisualIds = new Set(visualMessageIds.current.values()); const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id)); if (optimistic) { visualId = optimistic.id; visualMessageIds.current.set(event.messageId, visualId); } }
           visualId ??= event.messageId;
           if (!current.some((message) => message.id === visualId)) return [...current, { id: visualId, conversationId, role: "agent", parts: [{ type: "text", text: event.delta }], createdAt: new Date().toISOString(), streaming: true }];

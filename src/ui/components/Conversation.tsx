@@ -9,7 +9,7 @@ const Streamdown = lazy(async () => ({ default: (await import("streamdown")).Str
 
 const activityIcon = { browser: Globe2, terminal: Terminal, file: FileText, handoff: Cloud, status: Cloud };
 function textOf(message: Message) { return message.parts.filter((part) => part.type === "text").map((part) => part.text).join(""); }
-const elapsedLabel = (milliseconds: number) => { const seconds = Math.max(0, Math.floor(milliseconds / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; };
+const elapsedLabel = (milliseconds: number) => { const seconds = Math.max(0, Math.floor(milliseconds / 1000)); const minutes = Math.floor(seconds / 60); return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`; };
 function SubmitArrowIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg>; }
 function StopIcon() { return <svg className="stop-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="7.5" y="7.5" width="9" height="9" rx="1.5" fill="currentColor" /></svg>; }
 function openExternalLink(event: MouseEvent<HTMLDivElement>) {
@@ -24,9 +24,9 @@ function openExternalLink(event: MouseEvent<HTMLDivElement>) {
   } catch { /* Ignore malformed Agent output instead of navigating the webview. */ }
 }
 function WorkingActivity({ agent, label, activities, startedAt }: { agent?: Pick<Agent, "id" | "name">; label: string; activities: ActivityEvent[]; startedAt: string }) {
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(0); const [open, setOpen] = useState(true);
   useEffect(() => { setNow(Date.now()); const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-  return <details className="agent-working-details" open><summary role="status" aria-label={`${agent?.name ?? "Agent"} is working: ${label}`}><span className="agent-working-avatar"><AgentAvatar agent={agent ?? { id: "working", name: "Agent" }} size={38} /></span><span className="agent-working-progress">{label}</span><time>{elapsedLabel(now - Date.parse(startedAt))}</time><ChevronDown className="agent-working-chevron" size={15} /></summary>{activities.length > 0 && <div className="agent-working-tools">{activities.map((activity) => { const Icon = activityIcon[activity.kind]; return <details className={`agent-tool-detail ${activity.status}`} key={activity.id}><summary><Icon size={14} /><span>{activity.title}</span><small>{activity.status === "running" ? "Running" : activity.status === "failed" ? "Failed" : "Done"}</small><ChevronDown size={13} /></summary><div>{activity.detail}</div></details>; })}</div>}</details>;
+  return <details className="agent-working-details" open={open}><summary role="status" aria-label={`${agent?.name ?? "Agent"} is working: ${label}`} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}><span className="agent-working-avatar"><AgentAvatar agent={agent ?? { id: "working", name: "Agent" }} size={38} /></span><span className="agent-working-progress">Working for <time>{elapsedLabel(now - Date.parse(startedAt))}</time></span><ChevronDown className="agent-working-chevron" size={15} /></summary>{activities.length > 0 && <div className="agent-working-tools">{activities.map((activity) => { const Icon = activityIcon[activity.kind]; return <details className={`agent-tool-detail ${activity.status}`} key={activity.id}><summary><Icon size={14} /><span>{activity.title}</span><small>{activity.status === "running" ? "Running" : activity.status === "failed" ? "Failed" : "Done"}</small><ChevronDown size={13} /></summary><div>{activity.detail}</div></details>; })}</div>}</details>;
 }
 export function MessageView({ message, agent, activities, entering = false }: { message: Message; agent?: Pick<Agent, "id" | "name">; activities: ActivityEvent[]; entering?: boolean }) {
   const text = textOf(message);

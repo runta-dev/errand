@@ -104,19 +104,19 @@ describe("useCrewController", () => {
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "Hi" }]);
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent:first", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking" }], createdAt: new Date(0).toISOString(), streaming: true } }));
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Checking" }], streaming: true });
     await act(async () => { await result.current.reconnect(); });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
-    act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent", notify: false }));
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent:first", notify: false }));
     expect(result.current.messages).toHaveLength(1);
-    act(() => listeners.get("conversation-atlas")?.({ type: "message.delta", messageId: "run-1:agent", delta: "Final answer after the tool" }));
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.delta", messageId: "run-1:agent:second", delta: "Final answer after the tool" }));
     expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Final answer after the tool" }], streaming: true });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
-    act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent", notify: true }));
+    act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent:second", notify: true }));
     expect(result.current.messages[1]).toMatchObject({ streaming: false });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Final answer after the tool");
-    act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent:second", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Final answer" }], createdAt: new Date(1).toISOString(), streaming: true } }));
-    expect(result.current.messages).toHaveLength(3);
-    expect(result.current.messages[2]).toMatchObject({ id: "run-1:agent:second", parts: [{ type: "text", text: "Final answer" }], streaming: true });
   });
 
   it("treats a newly created agent as a known empty conversation", async () => {

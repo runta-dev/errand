@@ -142,7 +142,8 @@ describe("Conversation states", () => {
     const message: Message = { id: "run-2:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking now" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[{ id: "tool:read", conversationId: message.conversationId, kind: "file", title: "Reading file", detail: "Read", status: "running", createdAt: new Date().toISOString() }]} />);
     expect(screen.getByRole("status", { name: "Agent is working: Checking now" })).toBeInTheDocument();
-    expect(screen.getByText("Checking now")).toHaveClass("agent-working-progress");
+    expect(screen.getByRole("status", { name: "Agent is working: Checking now" })).toHaveTextContent("Working for");
+    expect(screen.getByText("Reading file")).toBeInTheDocument();
     expect(container.querySelector(".message-body")).not.toBeInTheDocument();
   });
 
@@ -161,9 +162,12 @@ describe("Conversation states", () => {
     const message: Message = { id: "run-timer:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date(Date.now() - 65_000).toISOString(), streaming: true };
     render(<MessageView message={message} activities={[{ id: "tool:install", conversationId: message.conversationId, kind: "terminal", title: "Installing Chromium", detail: "Package installation", status: "running", createdAt: message.createdAt }]} />);
 
-    expect(screen.getByText("1:05")).toBeInTheDocument();
-    expect(screen.getAllByText("Installing Chromium")).toHaveLength(2);
+    expect(screen.getByText("1m 5s")).toBeInTheDocument();
+    expect(screen.getByText("Installing Chromium")).toBeInTheDocument();
     expect(screen.getByText("Package installation")).toBeInTheDocument();
+    const summary = screen.getByRole("status", { name: "Agent is working: Installing Chromium" });
+    fireEvent.click(summary);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
   });
 
   it("opens a safe text attachment preview", async () => {
