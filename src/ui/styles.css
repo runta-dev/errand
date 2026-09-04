@@ -63,6 +63,7 @@ button:not(:disabled),a[href],summary,[role="button"]{border-radius:8px;transiti
 button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{background:var(--interactive-hover)!important;color:var(--text)!important}
 .computer-trigger:hover{background:var(--interactive-hover)!important}
 .conversation-header .computer-trigger,.detail-panel>header .icon-button{width:30px;height:30px}
+.app-shell.details-open .conversation-header .computer-trigger{display:none}
 .detail-panel{width:320px;padding:0 14px 24px;background:var(--surface);box-shadow:none}.detail-panel>header{height:54px;justify-content:flex-end;border-bottom:0}.detail-panel section{border-bottom:0}.screen-section{padding:10px 8px 0!important;text-align:center}.screen-trigger{display:block;width:100%;padding:0;border:0;background:transparent;text-align:center}.screen-trigger:hover{background:transparent!important}.screen-trigger:disabled{cursor:default;opacity:.6}.screen-caption{display:block;margin-top:10px;color:var(--muted);font-size:13px}
 .computer-trigger:focus{outline:0}
 .detail-panel section:last-child{border-bottom:0}
