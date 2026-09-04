@@ -107,7 +107,7 @@ button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{ba
 .agent-row.is-working .agent-select>.agent-avatar{animation:landing-agent-hop 3.6s infinite;filter:drop-shadow(0 4px 8px rgb(0 0 0/.08));transform-origin:50% 100%}
 @media (prefers-reduced-motion:reduce){.agent-row.is-working .agent-select>.agent-avatar{animation:none;transform:none}}
 .detail-panel{width:var(--detail-panel-width,340px)}@media (min-width:1031px){.detail-panel{position:relative}}.detail-resize-handle{position:absolute;z-index:3;top:0;bottom:0;left:-4px;width:8px;cursor:col-resize;touch-action:none;-webkit-app-region:no-drag}.detail-resize-handle:focus-visible{outline:0}.detail-resize-handle:focus-visible:after{position:absolute;top:0;bottom:0;left:3px;width:2px;content:"";background:var(--primary)}
-.computer-preview{height:auto;aspect-ratio:16/9}
+.computer-preview{height:auto;aspect-ratio:16/9!important}
 @media (max-width:1180px){.app-shell.details-open{grid-template-columns:252px minmax(420px,1fr) var(--detail-panel-width,320px)}}
 @media (max-width:1030px) and (min-width:761px){.app-shell.details-open{grid-template-columns:238px minmax(0,1fr) min(var(--detail-panel-width,340px),340px)}.detail-panel{position:relative;width:min(var(--detail-panel-width,340px),340px)}}
 .agent-working-details>summary:hover{background:transparent!important}

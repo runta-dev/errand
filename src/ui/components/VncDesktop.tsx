@@ -4,14 +4,12 @@ import { createPortal } from "react-dom";
 import type { CloudComputerSession } from "@/domain/types";
 import { canvasHasVisualFrame } from "./vncFrame";
 
-export function VncSurface({ session, viewOnly, compact = false, onReconnect, onDisconnect, onAspectRatio }: { session: CloudComputerSession; viewOnly: boolean; compact?: boolean; onReconnect?(): void; onDisconnect?(): void; onAspectRatio?(ratio: number): void }) {
+export function VncSurface({ session, viewOnly, compact = false, onReconnect, onDisconnect }: { session: CloudComputerSession; viewOnly: boolean; compact?: boolean; onReconnect?(): void; onDisconnect?(): void }) {
   const target = useRef<HTMLDivElement>(null);
   const onDisconnectRef = useRef(onDisconnect);
-  const onAspectRatioRef = useRef(onAspectRatio);
   const [state, setState] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [failure, setFailure] = useState<string>();
   useEffect(() => { onDisconnectRef.current = onDisconnect; }, [onDisconnect]);
-  useEffect(() => { onAspectRatioRef.current = onAspectRatio; }, [onAspectRatio]);
 
   useEffect(() => {
     if (!target.current) return;
@@ -21,14 +19,15 @@ export function VncSurface({ session, viewOnly, compact = false, onReconnect, on
     let framePoll: number | undefined;
     let frameTimeout: number | undefined;
     let rfb: import("@novnc/novnc/lib/rfb.js").default | undefined;
-    if (compact) target.current.closest<HTMLElement>(".computer-preview")?.style.setProperty("aspect-ratio", "16 / 9");
+    const preview = compact ? target.current.closest<HTMLElement>(".computer-preview") : null;
+    preview?.style.removeProperty("aspect-ratio");
     setState("connecting"); setFailure(undefined);
     const stopFrameWait = () => { if (framePoll) window.clearInterval(framePoll); if (frameTimeout) window.clearTimeout(frameTimeout); framePoll = undefined; frameTimeout = undefined; };
     const notifyDisconnect = () => { if (notifiedDisconnect) return; notifiedDisconnect = true; onDisconnectRef.current?.(); };
     const hasFramebuffer = () => { const canvas = target.current?.querySelector("canvas"); return canvas ? canvasHasVisualFrame(canvas) : false; };
     const connected = () => {
       connectedToServer = true;
-      framePoll = window.setInterval(() => { if (!cancelled && hasFramebuffer()) { const canvas = target.current?.querySelector("canvas"); if (canvas && canvas.width > 0 && canvas.height > 0) { const ratio = canvas.width / canvas.height; onAspectRatioRef.current?.(ratio); if (compact) target.current?.closest<HTMLElement>(".computer-preview")?.style.setProperty("aspect-ratio", String(ratio)); } stopFrameWait(); setState("connected"); } }, 100);
+      framePoll = window.setInterval(() => { if (!cancelled && hasFramebuffer()) { stopFrameWait(); setState("connected"); } }, 100);
       frameTimeout = window.setTimeout(() => { if (cancelled || hasFramebuffer()) return; stopFrameWait(); setFailure("Cloud computer did not produce a video frame."); setState("disconnected"); notifyDisconnect(); rfb?.disconnect(); }, 8_000);
     };
     const disconnected = (event: Event) => {
@@ -47,7 +46,7 @@ export function VncSurface({ session, viewOnly, compact = false, onReconnect, on
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
       if (cancelled || !target.current) return;
       rfb = new RFB(target.current, session.url, { shared: true, wsProtocols: session.protocols });
-      rfb.viewOnly = viewOnly; rfb.scaleViewport = true; rfb.resizeSession = true;
+      rfb.viewOnly = viewOnly; rfb.scaleViewport = true; rfb.resizeSession = false;
       rfb.addEventListener("connect", connected); rfb.addEventListener("disconnect", disconnected); rfb.addEventListener("securityfailure", securityFailure);
     }).catch(() => { if (!cancelled) { setFailure("Could not load the cloud computer client."); setState("disconnected"); notifyDisconnect(); } });
     return () => { cancelled = true; stopFrameWait(); rfb?.removeEventListener("connect", connected); rfb?.removeEventListener("disconnect", disconnected); rfb?.removeEventListener("securityfailure", securityFailure); rfb?.disconnect(); };
