@@ -23,6 +23,16 @@ const LEGACY_IDENTITY_INITIAL_MESSAGE = "Introduce yourself briefly using only t
 const INITIAL_MESSAGE_PREFIX = "[Runta Crew bootstrap] ";
 const initialMessage = (name: string) => `${INITIAL_MESSAGE_PREFIX}Reply with exactly these two short sentences: ${JSON.stringify(`Hi, I'm ${name}, your Runta Crew agent.`)} ${JSON.stringify("Tell me what you're working on and I'll jump in.")} Do not add anything else.`;
 const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Complete tasks using the available files, terminal, browser, and computer tools; verify results before reporting them. Be concise, practical, and honest. Do not use emoji unless asked. Do not proactively mention underlying models or implementation details.`;
+const crewGreeting = (agentId: string, name: string) => {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(agentId)) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  return [
+    `Hi, I'm ${name}, your Runta Crew agent.\nTell me what you're working on and I'll jump in.`,
+    `Hi, I'm ${name} from your Runta Crew.\nWhat should we work on first?`,
+    `${name} here, ready to help.\nTell me what you'd like to get done.`,
+    `Hi, I'm ${name}, and I'm ready to go.\nPoint me at a task and I'll get started.`,
+  ][hash % 4];
+};
 const isInitialMessage = (prompt: string | null | undefined) => prompt === LEGACY_INITIAL_MESSAGE || prompt === LEGACY_IDENTITY_INITIAL_MESSAGE || prompt?.startsWith(INITIAL_MESSAGE_PREFIX) === true;
 const visiblePrompt = (prompt: string | null | undefined) => {
   if (!prompt) return "";
@@ -147,7 +157,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         id: `bootstrap:${agentId}:agent`,
         conversationId: conversationId(agentId),
         role: "agent",
-        parts: [{ type: "text", text: `Hi, I'm ${name.trim()}, your Runta Crew agent.\nTell me what you're working on and I'll jump in.` }],
+        parts: [{ type: "text", text: crewGreeting(agentId, name.trim()) }],
         createdAt: new Date().toISOString(),
         streaming: false,
       }];
