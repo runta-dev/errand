@@ -92,6 +92,7 @@ describe("useCrewController", () => {
     expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }] });
     expect(result.current.messages[1]).toMatchObject({ role: "agent", streaming: true });
     const visualIds = result.current.messages.map((message) => message.id);
+    const workingStartedAt = result.current.messages[1]?.createdAt;
     expect(sendMessage).toHaveBeenCalledTimes(1);
 
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
@@ -105,9 +106,11 @@ describe("useCrewController", () => {
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "Hi" }]);
+    expect(result.current.messages[1]?.createdAt).toBe(workingStartedAt);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent:first", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Checking" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages[1]).toMatchObject({ id: visualIds[1], parts: [{ type: "text", text: "Checking" }], streaming: true });
+    expect(result.current.messages[1]?.createdAt).toBe(workingStartedAt);
     await act(async () => { await result.current.reconnect(); });
     expect(result.current.agents[0]?.lastMessagePreview).toBe("Old server reply");
     act(() => listeners.get("conversation-atlas")?.({ type: "message.completed", messageId: "run-1:agent:first", notify: false }));

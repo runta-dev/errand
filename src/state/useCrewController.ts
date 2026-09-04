@@ -95,8 +95,14 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     Promise.all([client.listConversations(selectedAgentId, controller.signal), client.listApprovalRequests(selectedAgentId, controller.signal), client.getComputer(selectedAgentId, controller.signal)]).then(async ([conversations, nextApprovals, nextComputer]) => {
       const conversation = conversations[0]; const data = conversation ? await client.getConversation(conversation.id, controller.signal) : undefined;
       if (alive && !deletingAgentIds.current.has(selectedAgentId)) {
-        const hydratedMessages = (data?.messages ?? []).map((message) => { const visualId = visualMessageIds.current.get(message.id); return visualId ? { ...message, id: visualId } : message; });
-        const optimisticMessages = (snapshots.current.get(selectedAgentId)?.messages ?? []).filter((message) => message.id.startsWith(OPTIMISTIC_USER_PREFIX) || message.id.startsWith(OPTIMISTIC_AGENT_PREFIX));
+        const snapshotMessages = snapshots.current.get(selectedAgentId)?.messages ?? [];
+        const hydratedMessages = (data?.messages ?? []).map((message) => {
+          const visualId = visualMessageIds.current.get(message.id);
+          if (!visualId) return message;
+          const visualMessage = snapshotMessages.find((current) => current.id === visualId);
+          return { ...message, id: visualId, createdAt: visualMessage?.createdAt ?? message.createdAt };
+        });
+        const optimisticMessages = snapshotMessages.filter((message) => message.id.startsWith(OPTIMISTIC_USER_PREFIX) || message.id.startsWith(OPTIMISTIC_AGENT_PREFIX));
         const nextMessages = [...hydratedMessages, ...optimisticMessages.filter((message) => !hydratedMessages.some((item) => item.id === message.id))];
         const preview = latestCompletedAgentPreview(nextMessages);
         snapshots.current.set(selectedAgentId, { messages: nextMessages, approvals: nextApprovals, computer: nextComputer, cachedAt: Date.now() });
@@ -155,7 +161,9 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
             const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id));
             if (optimistic) { visualMessageIds.current.set(event.message.id, optimistic.id); nextMessage = { ...event.message, id: optimistic.id }; }
           }
-          return current.some((message) => message.id === nextMessage.id) ? current.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...current, nextMessage];
+          const visualMessage = current.find((message) => message.id === nextMessage.id);
+          if (visualMessage) nextMessage = { ...nextMessage, createdAt: visualMessage.createdAt };
+          return visualMessage ? current.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...current, nextMessage];
         });
       }
       if (event.type === "message.delta") {
@@ -193,7 +201,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
         }
       }
       if (event.type === "message.updated") {
-        updateMessages((current) => { let visualId = visualMessageIds.current.get(event.message.id); if (!visualId && event.message.role === "agent") { const claimedVisualIds = new Set(visualMessageIds.current.values()); const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id)); if (optimistic) { visualId = optimistic.id; visualMessageIds.current.set(event.message.id, visualId); } } const nextMessage = visualId ? { ...event.message, id: visualId } : event.message; const settled = event.message.role === "agent" && !event.message.streaming ? current.filter((message) => message.id === nextMessage.id || message.role !== "agent" || !message.streaming) : current; return settled.some((message) => message.id === nextMessage.id) ? settled.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...settled, nextMessage]; });
+        updateMessages((current) => { let visualId = visualMessageIds.current.get(event.message.id); if (!visualId && event.message.role === "agent") { const claimedVisualIds = new Set(visualMessageIds.current.values()); const optimistic = current.find((message) => message.id.startsWith(OPTIMISTIC_AGENT_PREFIX) && !claimedVisualIds.has(message.id)); if (optimistic) { visualId = optimistic.id; visualMessageIds.current.set(event.message.id, visualId); } } let nextMessage = visualId ? { ...event.message, id: visualId } : event.message; const visualMessage = current.find((message) => message.id === nextMessage.id); if (visualMessage) nextMessage = { ...nextMessage, createdAt: visualMessage.createdAt }; const settled = event.message.role === "agent" && !event.message.streaming ? current.filter((message) => message.id === nextMessage.id || message.role !== "agent" || !message.streaming) : current; return visualMessage ? settled.map((message) => message.id === nextMessage.id ? nextMessage : message) : [...settled, nextMessage]; });
         if (event.message.role === "agent" && !event.message.streaming) setAgents((current) => current.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: agentMessagePreview(event.message) || undefined } : agent));
       }
       if (event.type === "approval.updated") { setApprovals((current) => { const next = current.map((approval) => approval.id === event.approval.id ? event.approval : approval); const snapshot = snapshots.current.get(selectedAgentId); snapshots.current.set(selectedAgentId, { messages: snapshot?.messages ?? [], approvals: next, computer: snapshot?.computer, cachedAt: Date.now() }); return next; }); if (event.approval.status === "pending") void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} needs approval`, body: event.approval.title }); }
