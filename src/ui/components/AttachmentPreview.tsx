@@ -1,5 +1,6 @@
 import { File, FileText, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Attachment } from "@/domain/types";
 
 const IMAGE = /^image\/(?:avif|gif|jpeg|png|svg\+xml|webp)$/i;
@@ -32,14 +33,14 @@ async function loadPreview(attachment: Attachment): Promise<Preview> {
 
 function PreviewDialog({ preview, onClose }: { preview: Preview; onClose(): void }) {
   useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [onClose]);
-  return <div className="attachment-preview-backdrop" role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><header><strong>{preview.name}</strong><button type="button" onClick={onClose} aria-label="Close preview"><X size={20} /></button></header>{preview.dataUrl ? <img src={preview.dataUrl} alt={preview.name} /> : <pre>{preview.text}</pre>}</div>;
+  return createPortal(<div className="attachment-preview-backdrop" role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><header><strong>{preview.name}</strong><button type="button" onClick={onClose} aria-label="Close preview"><X size={20} /></button></header>{preview.dataUrl ? <img src={preview.dataUrl} alt={preview.name} /> : <pre>{preview.text}</pre>}</div>, document.body);
 }
 
 function AttachmentCard({ attachment, onPreview, onRemove }: { attachment: Attachment; onPreview(preview: Preview): void; onRemove?(): void }) {
   const [thumbnail, setThumbnail] = useState<string>(); const [error, setError] = useState<string>();
   useEffect(() => { if (!isImage(attachment)) return; let alive = true; void loadPreview(attachment).then((preview) => { if (alive) setThumbnail(preview.dataUrl); }).catch(() => undefined); return () => { alive = false; }; }, [attachment]);
   const previewable = isImage(attachment) || isText(attachment);
-  return <div className={`message-attachment-card ${isImage(attachment) ? "is-image" : ""} ${thumbnail ? "has-thumbnail" : ""}`}>{previewable ? <button type="button" className="attachment-open" aria-label={`Preview ${attachment.name}`} onClick={() => { setError(undefined); void loadPreview(attachment).then(onPreview).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Preview failed")); }}>{thumbnail ? <img src={thumbnail} alt="" /> : <FileText size={18} />}<span><strong>{attachment.name}</strong><small>{error ?? `${formatBytes(attachment.size)} · Preview`}</small></span></button> : <><File size={18} /><span><strong>{attachment.name}</strong><small>{formatBytes(attachment.size)} · {attachment.mediaType}</small></span></>}{onRemove && <button type="button" className="attachment-remove" onClick={onRemove} aria-label={`Remove ${attachment.name}`}><X size={13} /></button>}</div>;
+  return <div className={`message-attachment-card ${isImage(attachment) ? "is-image" : ""} ${thumbnail ? "has-thumbnail" : ""}`}>{previewable ? <button type="button" className="attachment-open" aria-label={`Preview ${attachment.name}`} onClick={() => { setError(undefined); if (thumbnail) { onPreview({ name: attachment.name, dataUrl: thumbnail }); return; } void loadPreview(attachment).then(onPreview).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Preview failed")); }}>{thumbnail ? <img src={thumbnail} alt="" /> : <FileText size={18} />}<span><strong>{attachment.name}</strong><small>{error ?? `${formatBytes(attachment.size)} · Preview`}</small></span></button> : <><File size={18} /><span><strong>{attachment.name}</strong><small>{formatBytes(attachment.size)} · {attachment.mediaType}</small></span></>}{onRemove && <button type="button" className="attachment-remove" onClick={onRemove} aria-label={`Remove ${attachment.name}`}><X size={13} /></button>}</div>;
 }
 
 export function AttachmentCards({ attachments, onRemove }: { attachments: Attachment[]; onRemove?(id: string): void }) {

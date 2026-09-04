@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Agent, Message } from "@/domain/types";
 import { Conversation, MessageView } from "./Conversation";
@@ -233,7 +233,8 @@ describe("Conversation states", () => {
   });
 
   it("renders user images above the text bubble", async () => {
-    window.runtaCrew = { attachments: { choose: async () => [], addImage: async () => ({ id: "unused", name: "unused.png", size: 3, mediaType: "image/png" }), read: async () => ({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }) } } as unknown as typeof window.runtaCrew;
+    const read = vi.fn(async () => ({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }));
+    window.runtaCrew = { attachments: { choose: async () => [], addImage: async () => ({ id: "unused", name: "unused.png", size: 3, mediaType: "image/png" }), read } } as unknown as typeof window.runtaCrew;
     const message: Message = { id: "user-with-image", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "What is this?" }, { type: "attachment", attachment: { id: "image-1", name: "pasted.png", size: 3, mediaType: "image/png", source: "local-selection" } }], createdAt: new Date().toISOString() };
     const { container } = render(<MessageView message={message} activities={[]} />);
     const messageElement = container.querySelector(".message")!;
@@ -241,8 +242,12 @@ describe("Conversation states", () => {
     expect(messageElement.children[0]).toHaveClass("message-attachments");
     expect(messageElement.children[1]).toHaveClass("message-body");
     expect(messageElement.children[1]).toHaveTextContent("What is this?");
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "Preview pasted.png" }));
-    expect(await screen.findByRole("dialog", { name: "Preview pasted.png" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Preview pasted.png" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement).toBe(document.body);
+    expect(read).toHaveBeenCalledTimes(1);
   });
 
   it("animates a user entry with CSS and the final agent response at its state transition", () => {
