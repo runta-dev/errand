@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
-import type { Agent, ConversationEvent, Message } from "@/domain/types";
+import type { Agent, Attachment, ConversationEvent, Message } from "@/domain/types";
 import { useCrewController } from "./useCrewController";
 
 const agent = (id: string, name: string): Agent => ({ id, name, role: "Cloud coding agent", goal: name, status: "idle", avatar: name[0]!, lastActiveAt: new Date(0).toISOString(), unreadCount: 0, computerId: id });
@@ -86,10 +86,11 @@ describe("useCrewController", () => {
     const { result } = renderHook(() => useCrewController(client));
     await waitFor(() => expect(result.current.selectedAgentId).toBe("atlas"));
     await waitFor(() => expect(listeners.has("conversation-atlas")).toBe(true));
+    const attachment: Attachment = { id: "image-1", name: "screen.png", size: 3, mediaType: "image/png", source: "local-selection" };
     let send!: Promise<void>;
-    act(() => { send = result.current.sendMessage("hello"); });
+    act(() => { send = result.current.sendMessage("hello", [attachment]); });
     expect(result.current.messages).toHaveLength(2);
-    expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }] });
+    expect(result.current.messages[0]).toMatchObject({ role: "user", parts: [{ type: "text", text: "hello" }, { type: "attachment", attachment }] });
     expect(result.current.messages[1]).toMatchObject({ role: "agent", streaming: true });
     const visualIds = result.current.messages.map((message) => message.id);
     const workingStartedAt = result.current.messages[1]?.createdAt;
@@ -98,11 +99,14 @@ describe("useCrewController", () => {
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
+    expect(result.current.messages[0]?.parts).toEqual([{ type: "text", text: "hello" }, { type: "attachment", attachment }]);
 
-    await act(async () => { resolveSend({ id: "run-1:user:response", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() }); await send; });
+    const cloudAttachment: Attachment = { ...attachment, id: "artifact-1", source: "cloud", agentId: "atlas" };
+    await act(async () => { resolveSend({ id: "run-1:user:response", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }, { type: "attachment", attachment: cloudAttachment }], createdAt: new Date(0).toISOString() }); await send; });
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:user", conversationId: "conversation-atlas", role: "user", parts: [{ type: "text", text: "hello" }], createdAt: new Date(0).toISOString() } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
+    expect(result.current.messages[0]?.parts).toEqual([{ type: "text", text: "hello" }, { type: "attachment", attachment: cloudAttachment }]);
     act(() => listeners.get("conversation-atlas")?.({ type: "message.created", message: { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Hi" }], createdAt: new Date(0).toISOString(), streaming: true } }));
     expect(result.current.messages.map((message) => message.id)).toEqual(visualIds);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "Hi" }]);

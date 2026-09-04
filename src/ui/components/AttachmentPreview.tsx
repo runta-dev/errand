@@ -17,7 +17,7 @@ async function content(attachment: Attachment): Promise<{ name: string; mediaTyp
   const response = await window.runtaCrew!.cloud!.request({ method: "GET", path: `/v2/agents/${encodeURIComponent(attachment.agentId)}/artifacts/${encodeURIComponent(attachment.id)}?include_content=true` });
   const artifact = response.body as { name?: unknown; media_type?: unknown; content_base64?: unknown } | undefined;
   if (response.status !== 200 || typeof artifact?.content_base64 !== "string") throw new Error(`Artifact preview failed (${response.status})`);
-  return { name: typeof artifact.name === "string" ? artifact.name : attachment.name, mediaType: typeof artifact.media_type === "string" ? artifact.media_type : attachment.mediaType, base64: artifact.content_base64 };
+  return { name: attachment.name, mediaType: typeof artifact.media_type === "string" ? artifact.media_type : attachment.mediaType, base64: artifact.content_base64 };
 }
 
 async function loadPreview(attachment: Attachment): Promise<Preview> {

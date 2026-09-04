@@ -7,6 +7,7 @@ interface RuntaRun { id: string; agent_id: string; status: string; prompt?: stri
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
 interface RuntaComputerSession { channels: { vnc: { websocket_url: string; protocols: string[] } } }
+const INPUT_ARTIFACT_PREFIX = "runta-crew-input-";
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
@@ -167,12 +168,18 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const latest = runs[0];
     return [{ id: conversationId(agentId), agentId, title: "Agent conversation", updatedAt: latest?.updated_at ?? new Date().toISOString() }];
   }
-  private async listRunArtifacts(agentId: string, runId: string): Promise<Attachment[]> {
+  private async listRunArtifacts(agentId: string, runId: string): Promise<{ input: Attachment[]; output: Attachment[] }> {
     try {
       const artifacts = await this.request<RuntaArtifact[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/artifacts?run_id=${encodeURIComponent(runId)}` });
-      return artifacts.filter((artifact) => typeof artifact.id === "string" && typeof artifact.name === "string" && typeof artifact.media_type === "string" && typeof artifact.size === "number").map((artifact) => ({ id: artifact.id, name: artifact.name, size: artifact.size, mediaType: artifact.media_type, source: "cloud", agentId }));
+      const input: Attachment[] = []; const output: Attachment[] = [];
+      for (const artifact of artifacts.filter((value) => typeof value.id === "string" && typeof value.name === "string" && typeof value.media_type === "string" && typeof value.size === "number")) {
+        const inputName = artifact.name.startsWith(INPUT_ARTIFACT_PREFIX) ? artifact.name.slice(INPUT_ARTIFACT_PREFIX.length).replace(/^\d+-/, "") : undefined;
+        const attachment: Attachment = { id: artifact.id, name: inputName || artifact.name, size: artifact.size, mediaType: artifact.media_type, source: "cloud", agentId };
+        (inputName === undefined ? output : input).push(attachment);
+      }
+      return { input, output };
     } catch {
-      return [];
+      return { input: [], output: [] };
     }
   }
   private replayRunMessages(agentId: string, run: RuntaRun, id: string, signal?: AbortSignal): Promise<Message[]> {
@@ -229,10 +236,15 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const agentId = agentIdFromConversation(id);
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=100` });
     const messageGroups = await mapWithConcurrency(runs.slice().reverse(), 8, async (run) => {
-      const [runMessagesValue, artifacts] = await Promise.all([this.replayRunMessages(agentId, run, id, _signal), terminalRunStatuses.has(run.status) ? this.listRunArtifacts(agentId, run.id) : Promise.resolve([])]);
-      if (!artifacts.length) return runMessagesValue;
-      const target = [...runMessagesValue].reverse().find((message) => message.role === "agent");
-      if (target) target.parts.push(...artifacts.map((attachment) => ({ type: "attachment" as const, attachment })));
+      const [runMessagesValue, artifacts] = await Promise.all([this.replayRunMessages(agentId, run, id, _signal), this.listRunArtifacts(agentId, run.id)]);
+      let userTarget = runMessagesValue.find((message) => message.role === "user");
+      if (!userTarget && artifacts.input.length) {
+        userTarget = { id: `${run.id}:user`, conversationId: id, role: "user", parts: [], createdAt: run.created_at ?? new Date().toISOString() };
+        runMessagesValue.unshift(userTarget);
+      }
+      if (userTarget) userTarget.parts.push(...artifacts.input.map((attachment) => ({ type: "attachment" as const, attachment })));
+      const agentTarget = [...runMessagesValue].reverse().find((message) => message.role === "agent");
+      if (agentTarget) agentTarget.parts.push(...artifacts.output.map((attachment) => ({ type: "attachment" as const, attachment })));
       return runMessagesValue;
     });
     const messages = messageGroups.flat();
@@ -244,14 +256,18 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       if (attachment.source !== "local-selection") throw new CrewError("contract_pending", "Only local attachments can be sent");
       const content = await window.runtaCrew?.attachments.read(attachment.id); if (!content) throw new CrewError("unknown", "Attachment is no longer available");
       if (!/^image\/(?:gif|jpeg|png|webp)$/i.test(content.mediaType)) throw new CrewError("contract_pending", "This attachment type is not supported as native Agent input");
-      return { type: "image" as const, data: content.base64, mime_type: content.mediaType };
+      return { attachment, content, promptImage: { type: "image" as const, data: content.base64, mime_type: content.mediaType } };
     }));
     const prompt = input.text.trim();
     const runs = await this.request<RuntaRun[]>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}/runs?limit=1` });
     const latest = runs[0];
-    const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt, ...(preparedImages.length ? { images: preparedImages } : {}) } });
+    const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt, ...(preparedImages.length ? { images: preparedImages.map((image) => image.promptImage) } : {}) } });
+    const persistedImages = await Promise.all(preparedImages.map(async ({ attachment, content }, index) => {
+      const artifact = await this.request<RuntaArtifact>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/artifacts`, body: { run_id: run.id, name: `${INPUT_ARTIFACT_PREFIX}${index + 1}-${attachment.name}`, media_type: content.mediaType, content_base64: content.base64 } });
+      return { id: artifact.id, name: attachment.name, size: artifact.size, mediaType: artifact.media_type, source: "cloud" as const, agentId };
+    }));
     for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();
-    return { id: `${run.id}:user:${crypto.randomUUID()}`, conversationId: input.conversationId, role: "user", parts: [...(input.text ? [{ type: "text" as const, text: input.text }] : []), ...(input.attachments ?? []).map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt: new Date().toISOString() };
+    return { id: `${run.id}:user:${crypto.randomUUID()}`, conversationId: input.conversationId, role: "user", parts: [...(input.text ? [{ type: "text" as const, text: input.text }] : []), ...persistedImages.map((attachment) => ({ type: "attachment" as const, attachment }))], createdAt: new Date().toISOString() };
   }
   subscribeToConversationEvents(id: string, listener: (event: ConversationEvent) => void): Subscription {
     const agentId = agentIdFromConversation(id);
