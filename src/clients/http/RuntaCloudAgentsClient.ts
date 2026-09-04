@@ -26,12 +26,16 @@ const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the
 const crewGreeting = (agentId: string, name: string) => {
   let hash = 0x811c9dc5;
   for (const byte of new TextEncoder().encode(agentId)) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-  return [
-    `Hi, I'm ${name}, your Runta Crew agent.\nTell me what you're working on and I'll jump in.`,
-    `Hi, I'm ${name} from your Runta Crew.\nWhat should we work on first?`,
-    `${name} here, ready to help.\nTell me what you'd like to get done.`,
-    `Hi, I'm ${name}, and I'm ready to go.\nPoint me at a task and I'll get started.`,
-  ][hash % 4];
+  const openings = [
+    `Hi, I'm ${name}, your Runta Crew agent.`, `Hello, I'm ${name}, ready to help.`, `${name} here, ready when you are.`, `Hi, I'm ${name} from your Runta Crew.`, `Hello, ${name} here and ready to go.`,
+    `I'm ${name}, your Crew agent.`, `Hi there, I'm ${name}.`, `${name} here, ready to get started.`, `Hello, I'm ${name}, and I'm all set.`, `Hi, I'm ${name}, here to help.`,
+  ];
+  const invitations = [
+    "Tell me what you're working on and I'll jump in.", "What should we work on first?", "Tell me what you'd like to get done.", "Point me at a task and I'll get started.", "What can I help you tackle?",
+    "Share the task and I'll take it from there.", "Where would you like to begin?", "Let me know what you'd like me to handle.", "What's first on the list?", "Give me a task and I'll get moving.",
+  ];
+  const variant = hash % 100;
+  return `${openings[Math.floor(variant / 10)]}\n${invitations[variant % 10]}`;
 };
 const isInitialMessage = (prompt: string | null | undefined) => prompt === LEGACY_INITIAL_MESSAGE || prompt === LEGACY_IDENTITY_INITIAL_MESSAGE || prompt?.startsWith(INITIAL_MESSAGE_PREFIX) === true;
 const visiblePrompt = (prompt: string | null | undefined) => {

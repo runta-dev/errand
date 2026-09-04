@@ -124,7 +124,7 @@ describe("RuntaCloudAgentsClient", () => {
     const messages = await new RuntaCloudAgentsClient().waitForInitialReply("agent-1", "Atlas");
 
     expect(request).not.toHaveBeenCalled();
-    expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Hi, I'm Atlas, your Runta Crew agent.\nTell me what you're working on and I'll jump in." }], streaming: false })]);
+    expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Hello, I'm Atlas, and I'm all set.\nWhat can I help you tackle?" }], streaming: false })]);
     expect(messages[0]?.parts[0]?.type === "text" ? messages[0].parts[0].text.split("\n") : []).toHaveLength(2);
   });
 
