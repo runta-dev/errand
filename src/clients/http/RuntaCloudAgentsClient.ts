@@ -8,6 +8,7 @@ interface ModelProvider { id: string; display_name: string; protocol: string; de
 interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
 interface RuntaComputerSession { channels: { vnc: { websocket_url: string; protocols: string[] } } }
 const INPUT_ARTIFACT_PREFIX = "runta-crew-input-";
+const inputArtifactName = (index: number, mediaType: string) => `${INPUT_ARTIFACT_PREFIX}${index + 1}-image.${mediaType.toLowerCase() === "image/jpeg" ? "jpg" : mediaType.toLowerCase().slice("image/".length)}`;
 
 const conversationId = (agentId: string) => `conversation-${agentId}`;
 const agentIdFromConversation = (id: string) => id.startsWith("conversation-") ? id.slice("conversation-".length) : id;
@@ -263,7 +264,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const latest = runs[0];
     const run = await this.request<RuntaRun>({ method: "POST", path: latest ? `/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(latest.id)}/follow-ups` : `/v2/agents/${encodeURIComponent(agentId)}/runs`, body: { prompt, ...(preparedImages.length ? { images: preparedImages.map((image) => image.promptImage) } : {}) } });
     const persistedImages = await Promise.all(preparedImages.map(async ({ attachment, content }, index) => {
-      const artifact = await this.request<RuntaArtifact>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/artifacts`, body: { run_id: run.id, name: `${INPUT_ARTIFACT_PREFIX}${index + 1}-${attachment.name}`, media_type: content.mediaType, content_base64: content.base64 } });
+      const artifact = await this.request<RuntaArtifact>({ method: "POST", path: `/v2/agents/${encodeURIComponent(agentId)}/artifacts`, body: { run_id: run.id, name: inputArtifactName(index, content.mediaType), media_type: content.mediaType, content_base64: content.base64 } });
       return { id: artifact.id, name: attachment.name, size: artifact.size, mediaType: artifact.media_type, source: "cloud" as const, agentId };
     }));
     for (const refresh of this.conversationRefreshListeners.get(input.conversationId) ?? []) refresh();

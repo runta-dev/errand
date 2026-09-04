@@ -161,6 +161,21 @@ describe("Conversation states", () => {
     expect(addImage).toHaveBeenCalledWith(expect.objectContaining({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }));
   });
 
+  it("clears submitted images before the send request settles", async () => {
+    let resolveSend!: () => void;
+    const onSend = vi.fn(() => new Promise<void>((resolve) => { resolveSend = resolve; }));
+    window.runtaCrew = { attachments: { choose: async () => [], addImage: async () => ({ id: "pasted-1", name: "pasted.png", size: 3, mediaType: "image/png" }), read: async () => ({ name: "pasted.png", mediaType: "image/png", base64: "YWJj" }) } } as unknown as typeof window.runtaCrew;
+    render(<Conversation agent={agent} messages={[]} activities={[]} onSend={onSend} onToggleDetails={() => undefined} />);
+    const composer = screen.getByRole("textbox", { name: "Message Atlas" });
+    const image = new File([Uint8Array.from([97, 98, 99])], "pasted.png", { type: "image/png" });
+    fireEvent.paste(composer, { clipboardData: { files: [], items: [{ kind: "file", type: "image/png", getAsFile: () => image }] } });
+    expect(await screen.findByText("pasted.png")).toBeInTheDocument();
+    fireEvent.change(composer, { target: { value: "what is this" } });
+    fireEvent.keyDown(composer, { key: "Enter", isComposing: false, keyCode: 13 });
+    expect(screen.queryByText("pasted.png")).not.toBeInTheDocument();
+    resolveSend();
+  });
+
   it("shows the animated agent avatar before the first token arrives", () => {
     const message: Message = { id: "run-1:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "" }], createdAt: new Date().toISOString(), streaming: true };
     const { container } = render(<MessageView message={message} activities={[]} />);

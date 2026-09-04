@@ -147,6 +147,7 @@ describe("RuntaCloudAgentsClient", () => {
     expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ method: "PUT" }));
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents/agent-1/runs", body: expect.objectContaining({ prompt: expect.stringContaining("Compare them"), images: [{ type: "image", data: "YWJj", mime_type: "image/png" }, { type: "image", data: "ZGVm", mime_type: "image/jpeg" }] }) }));
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents/agent-1/artifacts", body: expect.objectContaining({ run_id: "run-image", name: "runta-crew-input-1-image.png", content_base64: "YWJj" }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents/agent-1/artifacts", body: expect.objectContaining({ run_id: "run-image", name: "runta-crew-input-2-image.jpg", content_base64: "ZGVm" }) }));
     expect(message.parts.filter((part) => part.type === "attachment").every((part) => part.attachment.source === "cloud")).toBe(true);
   });
 
