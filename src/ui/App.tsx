@@ -161,7 +161,7 @@ export function App() {
       }
       const agent = await crew.createAgent({ name, modelProviderId: provider.id });
       setCreatingAgentPhase("typing");
-      const greeting = await client.waitForInitialReply(agent.id);
+      const greeting = await client.waitForInitialReply(agent.id, agent.name);
       setDetailsOpen(false);
       crew.focusAgentWithMessages(agent.id, greeting);
       setComposerFocusRequest((current) => current + 1);

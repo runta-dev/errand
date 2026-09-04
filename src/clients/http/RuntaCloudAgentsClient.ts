@@ -141,7 +141,17 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       await new Promise<void>((resolve) => window.setTimeout(resolve, AGENT_READY_POLL_MS));
     }
   }
-  async waitForInitialReply(agentId: string, signal?: AbortSignal): Promise<Message[]> {
+  async waitForInitialReply(agentId: string, name?: string, signal?: AbortSignal): Promise<Message[]> {
+    if (name?.trim()) {
+      return [{
+        id: `bootstrap:${agentId}:agent`,
+        conversationId: conversationId(agentId),
+        role: "agent",
+        parts: [{ type: "text", text: `Hi, I'm ${name.trim()}, your Runta Crew agent.\nTell me what you're working on and I'll jump in.` }],
+        createdAt: new Date().toISOString(),
+        streaming: false,
+      }];
+    }
     const deadline = Date.now() + 3 * 60_000;
     for (;;) {
       if (signal?.aborted) throw new DOMException("Agent creation was cancelled", "AbortError");

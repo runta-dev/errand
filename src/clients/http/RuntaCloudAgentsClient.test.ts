@@ -117,6 +117,16 @@ describe("RuntaCloudAgentsClient", () => {
     expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "I am Atlas." }], streaming: false })]);
   });
 
+  it("returns the deterministic Crew greeting without another cloud request", async () => {
+    const request = vi.fn();
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined } } as unknown as DesktopBridge;
+
+    const messages = await new RuntaCloudAgentsClient().waitForInitialReply("agent-1", "Atlas");
+
+    expect(request).not.toHaveBeenCalled();
+    expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Hi, I'm Atlas, your Runta Crew agent.\nTell me what you're working on and I'll jump in." }], streaming: false })]);
+  });
+
   it("discovers a locally created run immediately instead of waiting for fallback polling", async () => {
     let created = false;
     const subscribe = vi.fn(() => () => undefined);
