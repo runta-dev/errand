@@ -46,10 +46,8 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
     expect(await client.createAgent({ name: "Reviewer", modelProviderId: "provider-1" })).toEqual(expect.objectContaining({ id: "agent-2", status: "idle" }));
     expect(await client.updateAgent("agent-1", { name: "Atlas" })).toEqual(expect.objectContaining({ id: "agent-1", name: "Atlas" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("You have a preinstalled Google Chrome browser, internet access, and native computer-use tools."), initial_message: expect.stringContaining("Hi, I'm Reviewer."), model_provider: { type: "managed", id: "provider-1" } }) }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ system_prompt: expect.stringContaining("For current information, news, or web research, use Chrome") }) }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ system_prompt: expect.stringContaining("Do not claim that you lack browser, internet, real-time research, or computer-use capability before attempting the available tools.") }) }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ system_prompt: expect.stringContaining("Do not use emoji unless the user explicitly asks for them.") }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("Be concise, practical, and honest"), initial_message: expect.stringContaining("Hi, I'm Reviewer, your Runta Crew agent."), model_provider: { type: "managed", id: "provider-1" } }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ system_prompt: expect.stringContaining("available files, terminal, browser, and computer tools") }) }));
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
 
