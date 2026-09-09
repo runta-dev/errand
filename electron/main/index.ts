@@ -2,13 +2,15 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notificati
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationStatus } from "../../src/shared/desktop";
 import { DEFAULT_RUNTA_API_URL, DEFAULT_RUNTA_DASHBOARD_URL, deviceAuthorizationRequest, deviceAuthorizationUrl, deviceTokenRequest, deviceTokenUrl, normalizeRuntaApiUrl, normalizeRuntaDashboardUrl } from "../../src/shared/runtaEndpoints";
 import { cloudRunEventsPath } from "../../src/shared/cloudStreamPath";
-import { VncOriginGrants, type VncOriginContext } from "./vncOrigin";
+import { isTrustedVncRenderer, VncOriginGrants, type VncOriginContext } from "./vncOrigin";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
+const expectedRendererUrl = isDev && devServerUrl ? new URL(devServerUrl).href : pathToFileURL(join(__dirname, "../renderer/index.html")).href;
 const credentialFile = () => join(app.getPath("userData"), "credentials.bin");
 const settingsFile = () => join(app.getPath("userData"), "settings.json");
 const defaultSettings: AppSettings = { endpoint: DEFAULT_RUNTA_API_URL, dashboardUrl: DEFAULT_RUNTA_DASHBOARD_URL, theme: "light", notifications: true };
@@ -23,7 +25,9 @@ const vncOriginGrants = new VncOriginGrants();
 
 function vncOriginContext(): VncOriginContext | undefined {
   if (!mainWindow || mainWindow.isDestroyed() || !settings.dashboardUrl) return;
-  return { endpoint: settings.endpoint, dashboardUrl: settings.dashboardUrl, rendererUrl: mainWindow.webContents.getURL(), webContentsId: mainWindow.webContents.id };
+  const frame = mainWindow.webContents.mainFrame;
+  if (frame.detached || !isTrustedVncRenderer(frame.url, frame.origin, expectedRendererUrl)) return;
+  return { endpoint: settings.endpoint, dashboardUrl: settings.dashboardUrl, rendererUrl: frame.url, rendererOrigin: frame.origin, webContentsId: mainWindow.webContents.id };
 }
 
 app.setName("Runta Crew");
@@ -86,7 +90,12 @@ function createWindow() {
   window.webContents.once("did-finish-load", () => {
     if (pendingDeepLinkAgentId) { window.webContents.send("deep-link:agent", pendingDeepLinkAgentId); pendingDeepLinkAgentId = undefined; }
     const smokeMarker = process.env.RUNTA_CREW_SMOKE_MARKER;
-    if (smokeMarker) { writeFileSync(smokeMarker, "ready\n"); app.quit(); return; }
+    if (smokeMarker) {
+      const frame = window.webContents.mainFrame;
+      const context = vncOriginContext();
+      writeFileSync(smokeMarker, JSON.stringify({ ready: true, rendererUrl: frame.url, rendererOrigin: frame.origin, vncOrigin: context?.rendererOrigin }));
+      app.quit(); return;
+    }
     const screenshotPath = process.env.RUNTA_CREW_SCREENSHOT_PATH;
     if (screenshotPath) globalThis.setTimeout(() => { void window.webContents.capturePage().then((image) => { writeFileSync(screenshotPath, image.toPNG()); app.quit(); }); }, 1200);
   });
@@ -221,8 +230,12 @@ ipcMain.handle("cloud:request", async (event, request: CloudRequest) => {
   if (text) { try { body = JSON.parse(text) as unknown; } catch { body = text; } }
   // Electron net.fetch does not populate Response.url reliably; reject redirects
   // for session requests and retain the validated original URL instead.
-  if (isComputerSessionRequest && vncContext?.webContentsId === event.sender.id && event.senderFrame === event.sender.mainFrame) {
-    body = vncOriginGrants.remember({ url: url.href, method: request.method, status: response.status, body }, vncContext, vncRevision, randomUUID()) ?? body;
+  if (isComputerSessionRequest && vncContext?.webContentsId === event.sender.id && !event.sender.isDestroyed()) {
+    const senderFrame = event.senderFrame;
+    const mainFrame = event.sender.mainFrame;
+    if (senderFrame && !senderFrame.detached && senderFrame.frameTreeNodeId === mainFrame.frameTreeNodeId && senderFrame.url === vncContext.rendererUrl && senderFrame.origin === vncContext.rendererOrigin) {
+      body = vncOriginGrants.remember({ url: url.href, method: request.method, status: response.status, body }, vncContext, vncRevision, randomUUID()) ?? body;
+    }
   }
   return { status: response.status, body };
 });

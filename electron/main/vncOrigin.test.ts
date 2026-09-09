@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { VncOriginGrants, type VncOriginContext } from "./vncOrigin";
+import { isTrustedVncRenderer, VncOriginGrants, type VncOriginContext } from "./vncOrigin";
 
 const now = Date.parse("2026-09-09T08:00:00Z");
 const nonce = "94b34170-31b4-453b-8135-afcdde214035";
 const sessionUrl = `wss://vnc.runta.me/?crew_session=${nonce}`;
-const context: VncOriginContext = { endpoint: "https://api.runta.me", dashboardUrl: "https://dashboard.runta.me", rendererUrl: "http://localhost:5173/", webContentsId: 7 };
+const context: VncOriginContext = { endpoint: "https://api.runta.me", dashboardUrl: "https://dashboard.runta.me", rendererUrl: "http://localhost:5173/", rendererOrigin: "http://localhost:5173", webContentsId: 7 };
 const body = { agent_id: "agent-1", expires_at: new Date(now + 15_000).toISOString(), channels: { vnc: { websocket_url: "wss://vnc.runta.me/", protocols: ["binary", "vnc-ticket.issued-ticket"] } } };
 const response = { url: "https://api.runta.me/v2/agents/agent-1/computer-sessions", method: "POST", status: 200, body };
 // Chromium does not expose Sec-WebSocket-Protocol to Electron's request hook.
@@ -30,10 +30,11 @@ describe("VncOriginGrants", () => {
 
   it("handles case-insensitive headers and the packaged file Origin", () => {
     const grants = new VncOriginGrants();
-    const packaged = { ...context, rendererUrl: "file:///Applications/Runta%20Crew.app/renderer/index.html" };
+    const packaged = { ...context, rendererUrl: "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
     grants.remember(response, packaged, grants.revision, nonce, now);
     expect(grants.headersFor(request, packaged, now)).toBeUndefined();
-    expect(grants.headersFor({ ...request, requestHeaders: { origin: "null" } }, packaged, now)).toEqual({ Origin: "https://dashboard.runta.me" });
+    expect(grants.headersFor({ ...request, requestHeaders: { origin: "null" } }, packaged, now)).toBeUndefined();
+    expect(grants.headersFor({ ...request, requestHeaders: { origin: "file://" } }, packaged, now)).toEqual({ Origin: "https://dashboard.runta.me" });
   });
 
   it.each([
@@ -62,6 +63,7 @@ describe("VncOriginGrants", () => {
     { endpoint: "https://api.other.example" },
     { dashboardUrl: "https://dashboard.other.example" },
     { rendererUrl: "http://localhost:5173/changed" },
+    { rendererOrigin: "https://other.example" },
     { webContentsId: 8 },
   ])("requires the same API, Dashboard, renderer and window context: %j", (change) => {
     expect(authorized().headersFor(request, { ...context, ...change }, now)).toBeUndefined();
@@ -100,5 +102,42 @@ describe("VncOriginGrants", () => {
     expect(grants.remember(response, context, grants.revision, "renderer-value", now)).toBeUndefined();
     expect(grants.remember(response, context, grants.revision, nonce, now)).toBeDefined();
     expect(grants.remember(response, context, grants.revision, nonce, now)).toBeUndefined();
+  });
+
+  it("authorizes only the exact expected packaged or development document and its native origin", () => {
+    const file = "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html";
+    expect(isTrustedVncRenderer(file, "file://", file)).toBe(true);
+    expect(isTrustedVncRenderer(file, "null", file)).toBe(false);
+    expect(isTrustedVncRenderer("file:///tmp/untrusted.html", "file://", file)).toBe(false);
+    expect(isTrustedVncRenderer(`${file}#changed`, "file://", file)).toBe(false);
+    expect(isTrustedVncRenderer("file://server/app.html", "file://", "file://server/app.html")).toBe(false);
+    expect(isTrustedVncRenderer(context.rendererUrl, context.rendererOrigin, context.rendererUrl)).toBe(true);
+    expect(isTrustedVncRenderer(context.rendererUrl, "file://", context.rendererUrl)).toBe(false);
+    for (const url of ["about:blank", "data:text/html,app", "blob:https://example.com/id"]) {
+      expect(isTrustedVncRenderer(url, "null", url)).toBe(false);
+    }
+  });
+
+  it.each([
+    { rendererUrl: "file:///app/index.html", rendererOrigin: "null" },
+    { rendererUrl: "about:blank", rendererOrigin: "null" },
+    { rendererUrl: "data:text/html,app", rendererOrigin: "null" },
+    { rendererUrl: "http://localhost:5173/", rendererOrigin: "file://" },
+  ])("rejects untrusted or opaque renderer origins at grant registration: %j", (renderer) => {
+    const grants = new VncOriginGrants();
+    expect(grants.remember(response, { ...context, ...renderer }, grants.revision, nonce, now)).toBeUndefined();
+  });
+
+  it("keeps fresh packaged nonce grants isolated from other requests and previous grants", () => {
+    const grants = new VncOriginGrants();
+    const packaged = { ...context, rendererUrl: "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
+    const fileRequest = { ...request, requestHeaders: { Origin: "file://" } };
+    const nextNonce = "565f98c4-4a95-42cf-ad76-249d7c19a540";
+    grants.remember(response, packaged, grants.revision, nonce, now);
+    grants.remember(response, packaged, grants.revision, nextNonce, now);
+    expect(grants.headersFor(fileRequest, context, now)).toBeUndefined();
+    expect(grants.headersFor(fileRequest, packaged, now)).toBeDefined();
+    expect(grants.headersFor(fileRequest, packaged, now)).toBeUndefined();
+    expect(grants.headersFor({ ...fileRequest, url: `wss://vnc.runta.me/?crew_session=${nextNonce}` }, packaged, now)).toBeDefined();
   });
 });

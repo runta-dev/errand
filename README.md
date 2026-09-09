@@ -71,6 +71,8 @@ npm run smoke
 
 Artifacts are written to `release/`. Local builds are ad-hoc signed; public distribution requires Runta signing, notarization, and an approved update channel.
 
+Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Runta Crew requires macOS 13 or later. ZIP artifacts remain unchanged.
+
 ## Under the hood
 
 Runta Crew keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.

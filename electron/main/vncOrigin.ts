@@ -2,6 +2,7 @@ export interface VncOriginContext {
   endpoint: string;
   dashboardUrl: string;
   rendererUrl: string;
+  rendererOrigin: string;
   webContentsId: number;
 }
 
@@ -25,7 +26,18 @@ function object(value: unknown): Record<string, unknown> | undefined {
 }
 
 function sameContext(left: VncOriginContext, right: VncOriginContext): boolean {
-  return left.endpoint === right.endpoint && left.dashboardUrl === right.dashboardUrl && left.rendererUrl === right.rendererUrl && left.webContentsId === right.webContentsId;
+  return left.endpoint === right.endpoint && left.dashboardUrl === right.dashboardUrl && left.rendererUrl === right.rendererUrl && left.rendererOrigin === right.rendererOrigin && left.webContentsId === right.webContentsId;
+}
+
+export function isTrustedVncRenderer(rendererUrl: string, rendererOrigin: string, expectedRendererUrl: string): boolean {
+  if (rendererUrl !== expectedRendererUrl) return false;
+  try {
+    const url = new URL(rendererUrl);
+    // Chromium serializes a local file origin as file://, while Node's URL
+    // reports null. Accept only the native origin of the known app document.
+    if (url.protocol === "file:") return !url.host && rendererOrigin === "file://";
+    return ["http:", "https:"].includes(url.protocol) && rendererOrigin === url.origin;
+  } catch { return false; }
 }
 
 function header(headers: Record<string, string>, name: string): string | undefined {
@@ -45,6 +57,7 @@ export class VncOriginGrants {
   remember(response: { url: string; method: string; status: number; body: unknown }, context: VncOriginContext, revision: number, nonce: string, now = Date.now()): Record<string, unknown> | undefined {
     this.grants = this.grants.filter((grant) => grant.expiresAt > now);
     if (revision !== this.generation || response.method !== "POST" || ![200, 201].includes(response.status) || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(nonce)) return;
+    if (!isTrustedVncRenderer(context.rendererUrl, context.rendererOrigin, context.rendererUrl)) return;
     try {
       const endpoint = new URL(context.endpoint);
       const dashboard = new URL(context.dashboardUrl);
@@ -76,9 +89,7 @@ export class VncOriginGrants {
   headersFor(request: WebSocketRequest, context: VncOriginContext, now = Date.now()): Record<string, string> | undefined {
     this.grants = this.grants.filter((grant) => grant.expiresAt > now);
     if (request.resourceType !== "webSocket" || request.method !== "GET" || request.webContentsId !== context.webContentsId) return;
-    let rendererOrigin: string;
-    try { rendererOrigin = new URL(context.rendererUrl).origin; } catch { return; }
-    if (header(request.requestHeaders, "origin") !== rendererOrigin) return;
+    if (header(request.requestHeaders, "origin") !== context.rendererOrigin) return;
     const index = this.grants.findIndex((candidate) => candidate.url === request.url && sameContext(candidate.context, context));
     if (index === -1) return;
     const [grant] = this.grants.splice(index, 1);
