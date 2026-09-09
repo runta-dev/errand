@@ -65,6 +65,7 @@ describe("RuntaCloudAgentsClient", () => {
     streamListener?.({ event: "pi.event", id: "7", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: "Hi" } } });
     streamListener?.({ event: "pi.event", id: "8", data: { type: "message_update", message: { id: "assistant-2" }, assistantMessageEvent: { type: "text_delta", delta: " there" } } });
     streamListener?.({ event: "run.status", id: "status:finished", data: { id: "run-1", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "Hi there", error: null } });
+    streamListener?.({ event: "stream.closed" });
     expect(events).toContainEqual({ type: "message.created", message: expect.objectContaining({ id: "run-1:agent:assistant-1", parts: [{ type: "text", text: "Checking." }], streaming: true }) });
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-1", notify: false });
     expect(events).toContainEqual({ type: "message.created", message: expect.objectContaining({ id: "run-1:agent:assistant-2", parts: [{ type: "text", text: "Hi" }], streaming: true }) });
@@ -74,6 +75,221 @@ describe("RuntaCloudAgentsClient", () => {
     expect(events).not.toContainEqual(expect.objectContaining({ type: "message.updated", message: expect.objectContaining({ id: "run-1:agent" }) }));
     expect(events).toContainEqual({ type: "message.completed", messageId: "run-1:agent:assistant-2", notify: true });
     subscription.unsubscribe();
+  });
+
+  it("shows an upstream assistant error when a finished status precedes the Pi error event", async () => {
+    let streamListener: ((event: CloudStreamEvent) => void) | undefined;
+    let finished = false;
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "run-error", agent_id: "agent-1", status: finished ? "finished" : "running", prompt: "Hello", result: finished ? "" : null, error: null }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const events: ConversationEvent[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+
+    finished = true;
+    streamListener?.({ event: "run.status", data: { status: "finished", result: "", error: null } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", content: [], stopReason: "error", errorMessage: '404 {"error":{"message":"The requested resource was not found","type":"resource_not_found_error"}}' } } });
+    streamListener?.({ event: "stream.closed" });
+
+    const failure = { id: "run-error:agent", role: "system", parts: [{ type: "text", text: 'Agent reply failed: 404 {"error":{"message":"The requested resource was not found","type":"resource_not_found_error"}}' }] };
+    expect(events.filter((event) => event.type === "message.updated").at(-1)).toMatchObject({ type: "message.updated", message: failure });
+    expect(events.at(-1)).toEqual({ type: "message.completed", messageId: "run-error:agent" });
+
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(events.filter((event) => event.type === "message.updated").at(-1)).toMatchObject({ type: "message.updated", message: failure });
+    subscription.unsubscribe();
+  });
+
+  it.each([false, true])("keeps a retry working and shows its successful reply, with terminal-first replay=%s", async (terminalFirst) => {
+    let streamListener: ((event: CloudStreamEvent) => void) | undefined;
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "retry", agent_id: "agent-1", status: "running", prompt: "Hello", result: null, error: null }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const events: ConversationEvent[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    if (terminalFirst) streamListener?.({ event: "run.status", data: { status: "finished", result: "", error: null } });
+    streamListener?.({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Failed partial" } } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 status code (no body)" } } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "aborted", errorMessage: "Request aborted" } } });
+    streamListener?.({ event: "pi.event", data: { type: "agent_settled" } });
+    expect(events.some((event) => event.type === "message.completed")).toBe(false);
+    expect(events.some((event) => event.type === "message.updated" && event.message.role === "system")).toBe(false);
+    streamListener?.({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Recovered" } } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Recovered" }] } } });
+    if (!terminalFirst) streamListener?.({ event: "run.status", data: { status: "finished", result: "Recovered", error: null } });
+    expect(events.some((event) => event.type === "message.completed")).toBe(false);
+    streamListener?.({ event: "stream.closed" });
+    expect(events).toContainEqual({ type: "message.updated", message: expect.objectContaining({ id: "retry:agent:active", parts: [{ type: "text", text: "Recovered" }], streaming: true }) });
+    expect(events).toContainEqual({ type: "message.completed", messageId: "retry:agent:active", notify: true });
+    expect(events.some((event) => event.type === "message.updated" && event.message.role === "system")).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("does not finish a retry on network EOF and uses the final polling result", async () => {
+    let streamListener: ((event: CloudStreamEvent) => void) | undefined;
+    let finished = false;
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "retry", agent_id: "agent-1", status: finished ? "finished" : "running", prompt: "Hello", result: finished ? "Recovered from polling" : null, error: null }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const events: ConversationEvent[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 temporary" } } });
+    streamListener?.({ event: "error", data: "network interrupted" });
+    streamListener?.({ event: "stream.closed" });
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(events.some((event) => event.type === "message.completed" || (event.type === "message.updated" && event.message.role === "system"))).toBe(false);
+    finished = true;
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(events).toContainEqual({ type: "message.updated", message: expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Recovered from polling" }], streaming: false }) });
+    expect(events).toContainEqual({ type: "message.completed", messageId: "retry:agent" });
+    expect(events.some((event) => event.type === "message.updated" && event.message.role === "system")).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it("finishes from an authoritative polled reply when the SSE connection stays open", async () => {
+    let streamListener: ((event: CloudStreamEvent) => void) | undefined;
+    let finished = false;
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "retry", agent_id: "agent-1", status: finished ? "finished" : "running", prompt: "Hello", result: finished ? "Final polled answer" : null, error: null }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const events: ConversationEvent[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    streamListener?.({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Old partial" } } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 earlier attempt" } } });
+    finished = true;
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(events).toContainEqual({ type: "message.updated", message: expect.objectContaining({ id: "retry:agent", role: "agent", parts: [{ type: "text", text: "Final polled answer" }], streaming: false }) }));
+    expect(events).toContainEqual({ type: "message.completed", messageId: "retry:agent" });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 stale replay" } } });
+    expect(events.some((event) => event.type === "message.updated" && event.message.role === "system")).toBe(false);
+    subscription.unsubscribe();
+  });
+
+  it.each(["failed", "cancelled"])("preserves authoritative live %s state over a pending attempt error", async (status) => {
+    let streamListener: ((event: CloudStreamEvent) => void) | undefined;
+    const request = vi.fn(async () => ({ status: 200, body: [{ id: "terminal", agent_id: "agent-1", status: "running", prompt: "Hello" }] }));
+    const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const events: ConversationEvent[] = [];
+    const subscription = new RuntaCloudAgentsClient().subscribeToConversationEvents("conversation-agent-1", (event) => events.push(event));
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 earlier attempt" } } });
+    streamListener?.({ event: "run.status", data: { status, result: "", error: status === "failed" ? "Final supervisor failure" : null } });
+    streamListener?.({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "stop" } } });
+    streamListener?.({ event: "stream.closed" });
+    expect(events.filter((event) => event.type === "message.updated").at(-1)).toMatchObject({ message: { role: "system", parts: [{ type: "text", text: status === "failed" ? "Final supervisor failure" : "Run cancelled." }] } });
+    subscription.unsubscribe();
+  });
+
+  it.each(["", "Old partial plus final aggregate"])("clears a retry error in historical replay with persisted result %j", async (result) => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [{ id: "retry", agent_id: "agent-1", status: "finished", prompt: "Hello", result, error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "run.status", data: { status: "finished", result } });
+        listener({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Failed partial" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 temporary" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "aborted" } } });
+        listener({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Recovered reply" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "stop" } } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+    expect(messages).toEqual([expect.objectContaining({ role: "user" }), expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Recovered reply" }] })]);
+  });
+
+  it.each(["error", "stream.closed"])("protects a saved successful result from an earlier replay error ending with %s", async (endEvent) => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [{ id: "retry", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "Saved final answer", error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 earlier attempt" } } });
+        listener({ event: endEvent });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+    expect(messages.at(-1)).toMatchObject({ role: "agent", parts: [{ type: "text", text: "Saved final answer" }] });
+  });
+
+  it.each(["failed", "cancelled"])("preserves historical terminal %s state after later successful assistant replay", async (status) => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [{ id: "retry", agent_id: "agent-1", status, prompt: "Hello", result: "", error: status === "failed" ? "Final supervisor failure" : null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "502 earlier attempt" } } });
+        listener({ event: "pi.event", data: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Earlier successful output" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", stopReason: "stop" } } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+    expect(messages.at(-1)).toMatchObject({ role: "system", parts: [{ type: "text", text: status === "failed" ? "Final supervisor failure" : "Run cancelled." }] });
+  });
+
+  it("recovers a persisted Pi assistant failure when replaying an empty finished run", async () => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [{ id: "run-error", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "", error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "run.status", data: { status: "finished", result: "", error: null } });
+        listener({ event: "pi.event", data: { type: "message_start", message: { role: "assistant", content: [] } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", content: [], stopReason: "error", errorMessage: "404: The requested resource was not found" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role: "assistant", content: [], stopReason: "aborted", errorMessage: "Request aborted" } } });
+        listener({ event: "pi.event", data: { type: "agent_settled" } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(messages).toEqual([
+      expect.objectContaining({ role: "user", parts: [{ type: "text", text: "Hello" }] }),
+      expect.objectContaining({ id: "run-error:agent", role: "system", parts: [{ type: "text", text: "Agent reply failed: 404: The requested resource was not found" }] }),
+    ]);
+  });
+
+  it("explains an empty finished reply and preserves its output attachments", async () => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [{ id: "artifact-1", run_id: "run-empty", name: "result.png", media_type: "image/png", size: 42 }] : [{ id: "run-empty", agent_id: "agent-1", status: "finished", prompt: "Render it", result: "", error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => { queueMicrotask(() => listener({ event: "stream.closed" })); return () => undefined; };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(messages[1]).toMatchObject({ role: "system", parts: [{ type: "text", text: "The Agent finished without returning a reply." }, { type: "attachment", attachment: { id: "artifact-1" } }] });
+  });
+
+  it.each(["user", "tool"])("recovers a real reply from events without an empty-result warning or a %s error", async (role) => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [{ id: "run-recovered", agent_id: "agent-1", status: "finished", prompt: "Hello", result: "", error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        listener({ event: "run.status", data: { status: "finished", result: "", error: null } });
+        listener({ event: "pi.event", data: { type: "message_update", message: { id: "assistant-1", role: "assistant" }, assistantMessageEvent: { type: "text_delta", delta: "Recovered reply" } } });
+        listener({ event: "pi.event", data: { type: "message_end", message: { role, stopReason: "error", errorMessage: "Not an assistant reply failure" } } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(messages).toEqual([
+      expect.objectContaining({ role: "user", parts: [{ type: "text", text: "Hello" }] }),
+      expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Recovered reply" }], streaming: false }),
+    ]);
   });
 
   it("shows the initial greeting without exposing its internal prompt", async () => {

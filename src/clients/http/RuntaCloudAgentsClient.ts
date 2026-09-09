@@ -62,15 +62,30 @@ function toolResultText(value: unknown): string | undefined {
   const text = content.flatMap((part) => part && typeof part === "object" && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string" ? [(part as { text: string }).text] : []).join("\n").trim();
   return text || undefined;
 }
-function runMessages(run: RuntaRun, id: string): Message[] {
+function runMessages(run: RuntaRun, id: string, replyError?: string): Message[] {
   const createdAt = run.created_at ?? new Date().toISOString();
   const updatedAt = run.updated_at ?? createdAt;
   const prompt = visiblePrompt(run.prompt); const user = prompt && !isInitialMessage(run.prompt) ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: prompt }], createdAt }] : [];
-  if (run.status === "failed" || run.status === "cancelled") {
-    const detail = run.error?.trim() || (run.status === "cancelled" ? "Run cancelled." : "Run failed.");
+  const terminalError = terminalRunStatuses.has(run.status) && run.status !== "cancelled" ? replyError : undefined;
+  if (terminalError || run.status === "failed" || run.status === "cancelled" || (run.status === "finished" && !run.result?.trim())) {
+    const detail = run.error?.trim() || terminalError || (run.status === "cancelled" ? "Run cancelled." : run.status === "finished" ? "The Agent finished without returning a reply." : "Run failed.");
     return [...user, { id: `${run.id}:agent`, conversationId: id, role: "system", parts: [{ type: "text", text: detail }], createdAt: updatedAt }];
   }
   return [...user, { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result ?? "" }], createdAt: updatedAt, streaming: !terminalRunStatuses.has(run.status) }];
+}
+
+function assistantError(event: CloudStreamEvent): string | undefined {
+  if (event.event !== "pi.event" || !event.data || typeof event.data !== "object") return undefined;
+  const payload = event.data as { type?: string; message?: { role?: string; stopReason?: string; errorMessage?: string } };
+  if (payload.type !== "message_end" || payload.message?.role !== "assistant" || payload.message.stopReason !== "error") return undefined;
+  const detail = stringValue(payload.message.errorMessage);
+  return detail ? `Agent reply failed: ${detail}` : "The Agent failed to generate a reply.";
+}
+
+function assistantSucceeded(event: CloudStreamEvent): boolean {
+  if (event.event !== "pi.event" || !event.data || typeof event.data !== "object") return false;
+  const payload = event.data as { type?: string; message?: { role?: string; stopReason?: string } };
+  return payload.type === "message_end" && payload.message?.role === "assistant" && ["stop", "length", "toolUse"].includes(payload.message.stopReason ?? "");
 }
 
 function assistantChunk(event: CloudStreamEvent): { sourceId: string; text: string } | undefined {
@@ -213,26 +228,35 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     if (!bridge?.subscribe || !terminalRunStatuses.has(run.status) || signal?.aborted) return Promise.resolve(fallback);
     return new Promise((resolve) => {
       let current: Message | undefined;
+      let replyError: string | undefined;
       let sawAssistant = false;
       let settled = false;
       let unsubscribe: () => void = () => undefined;
-      const finish = () => {
+      const finish = (incomplete = false) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeout);
-        signal?.removeEventListener("abort", finish);
+        signal?.removeEventListener("abort", aborted);
         unsubscribe();
+        if (run.status === "finished" && run.result?.trim() && (incomplete || replyError)) { resolve(fallback); return; }
+        if (replyError) { resolve(runMessages(run, id, replyError)); return; }
         if (!sawAssistant) { resolve(fallback); return; }
+        const recoveredReply = current?.parts.some((part) => part.type === "text" && part.text.trim());
         resolve([
           ...fallback.filter((message) => message.role === "user"),
           ...(current ? [current] : []),
-          ...fallback.filter((message) => message.role === "system"),
+          ...fallback.filter((message) => message.role === "system" && !(recoveredReply && run.status === "finished" && !run.error?.trim())),
         ]);
       };
-      const timeout = window.setTimeout(finish, 10_000);
-      signal?.addEventListener("abort", finish, { once: true });
+      const aborted = () => finish(true);
+      const timeout = window.setTimeout(() => finish(true), 10_000);
+      signal?.addEventListener("abort", aborted, { once: true });
       unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
-        if (event.event === "stream.closed" || event.event === "error") { finish(); return; }
+        if (settled) return;
+        if (event.event === "stream.closed" || event.event === "error") { finish(event.event === "error"); return; }
+        const failure = assistantError(event);
+        if (failure) { replyError = failure; current = undefined; }
+        else if (assistantSucceeded(event)) replyError = undefined;
         if (event.event === "pi.event" && event.data && typeof event.data === "object") {
           const payload = event.data as { type?: string };
           if (payload.type === "tool_execution_start") { current = undefined; return; }
@@ -268,7 +292,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         runMessagesValue.unshift(userTarget);
       }
       if (userTarget) userTarget.parts.push(...artifacts.input.map((attachment) => ({ type: "attachment" as const, attachment })));
-      const agentTarget = [...runMessagesValue].reverse().find((message) => message.role === "agent");
+      const agentTarget = [...runMessagesValue].reverse().find((message) => message.role === "agent" || message.id === `${run.id}:agent`);
       if (agentTarget) agentTarget.parts.push(...artifacts.output.map((attachment) => ({ type: "attachment" as const, attachment })));
       return runMessagesValue;
     });
@@ -298,13 +322,19 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const agentId = agentIdFromConversation(id);
     const observed = new Map<string, string>();
     const streams = new Map<string, () => void>();
-    const assistantStreams = new Map<string, { current?: string; seen: Set<string> }>();
+    const assistantStreams = new Map<string, { current?: string; seen: Set<string>; retrying: boolean }>();
+    const replyErrors = new Map<string, string>();
+    const streamRunUpdates = new Map<string, (run: RuntaRun) => void>();
     let baselineReady = false;
     const bridge = window.runtaCrew?.cloud;
     const subscribeToRun = (run: RuntaRun) => {
       if (!bridge?.subscribe || streams.has(run.id) || terminalRunStatuses.has(run.status)) return;
-      let terminal = false;
-      const assistant = { seen: new Set<string>() } as { current?: string; seen: Set<string> };
+      let latestRun = run;
+      let streamClosed = false;
+      let incompleteStream = false;
+      let finalized = false;
+      let replyError: string | undefined;
+      const assistant = { seen: new Set<string>(), retrying: false } as { current?: string; seen: Set<string>; retrying: boolean };
       const toolActivities = new Map<string, ActivityEvent>();
       assistantStreams.set(run.id, assistant);
       const completeCurrentAssistant = (notify = false) => {
@@ -312,27 +342,53 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         listener({ type: "message.completed", messageId: assistant.current, notify });
         assistant.current = undefined;
       };
+      const finish = (fromPoll = false) => {
+        if (finalized || !terminalRunStatuses.has(latestRun.status)) return;
+        const polledReply = fromPoll && latestRun.status === "finished" && Boolean(latestRun.result?.trim());
+        if (latestRun.status === "finished" && !streamClosed && !polledReply) return;
+        finalized = true;
+        const authoritativeFailure = latestRun.status === "failed" || latestRun.status === "cancelled";
+        const error = latestRun.status === "finished" && latestRun.result?.trim() ? undefined : replyError;
+        if (error) replyErrors.set(run.id, error); else replyErrors.delete(run.id);
+        if (authoritativeFailure || polledReply || incompleteStream || replyError || assistant.seen.size === 0) {
+          completeCurrentAssistant();
+          const message = runMessages(latestRun, id, error).find((candidate) => candidate.id === `${run.id}:agent`);
+          if (message) listener({ type: "message.updated", message });
+          listener({ type: "message.completed", messageId: `${run.id}:agent` });
+        } else completeCurrentAssistant(true);
+      };
+      streamRunUpdates.set(run.id, (next) => { latestRun = next; finish(true); });
       const unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event: CloudStreamEvent) => {
+        if (finalized) return;
+        if (event.event === "error") { incompleteStream = true; return; }
+        if (event.event === "stream.closed") { incompleteStream ||= !terminalRunStatuses.has(latestRun.status); streamClosed = true; finish(); return; }
+        const failure = assistantError(event);
+        if (failure) {
+          replyError = failure;
+          assistant.retrying = true;
+          return;
+        }
+        if (assistantSucceeded(event)) { replyError = undefined; replyErrors.delete(run.id); }
         if (event.event === "run.status" && event.data && typeof event.data === "object") {
           const data = event.data as Partial<RuntaRun> & { session_id?: string | null };
           if (typeof data.status !== "string") return;
-          const next: RuntaRun = { ...run, ...data, prompt: data.prompt ?? run.prompt, dsh_session_id: data.session_id ?? data.dsh_session_id ?? run.dsh_session_id };
-          terminal = terminalRunStatuses.has(next.status);
-          if (terminal) completeCurrentAssistant(true);
-          if (assistant.seen.size === 0) {
-            const message = runMessages(next, id).find((candidate) => candidate.id === `${run.id}:agent`);
+          latestRun = { ...latestRun, ...data, prompt: data.prompt ?? latestRun.prompt, dsh_session_id: data.session_id ?? data.dsh_session_id ?? latestRun.dsh_session_id };
+          if (terminalRunStatuses.has(latestRun.status)) finish();
+          else if (assistant.seen.size === 0) {
+            const message = runMessages(latestRun, id).find((candidate) => candidate.id === `${run.id}:agent`);
             if (message) listener({ type: "message.updated", message });
-            if (terminal) listener({ type: "message.completed", messageId: `${run.id}:agent` });
           }
           return;
         }
-        if (event.event !== "pi.event" || terminal || !event.data || typeof event.data !== "object") return;
+        if (event.event !== "pi.event" || !event.data || typeof event.data !== "object") return;
         const update = event.data as Record<string, unknown>;
         const chunk = assistantChunk(event);
         if (chunk) {
           const sourceId = chunk.sourceId;
           const messageId = `${run.id}:agent:${sourceId}`;
-          if (!assistant.seen.has(messageId)) {
+          if (assistant.retrying && assistant.current === messageId) {
+            listener({ type: "message.updated", message: { id: messageId, conversationId: id, role: "agent", parts: [{ type: "text", text: chunk.text }], createdAt: new Date().toISOString(), streaming: true } });
+          } else if (!assistant.seen.has(messageId)) {
             completeCurrentAssistant();
             assistant.current = messageId;
             assistant.seen.add(messageId);
@@ -341,6 +397,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
             assistant.current = messageId;
             listener({ type: "message.delta", messageId, delta: chunk.text });
           }
+          assistant.retrying = false;
         }
         if (update.type === "tool_execution_start") completeCurrentAssistant();
         const activityId = stringValue(update.toolCallId);
@@ -360,13 +417,15 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
           const signature = `${run.status}\u0000${run.result ?? ""}\u0000${run.error ?? ""}`;
           const previous = observed.get(run.id); observed.set(run.id, signature);
           subscribeToRun(run);
+          const updateStreamRun = streamRunUpdates.get(run.id);
+          if (previous !== signature) updateStreamRun?.(run);
           if (previous === undefined && !establishingBaseline) {
-            for (const message of runMessages(run, id)) listener({ type: "message.created", message });
-          } else if (!establishingBaseline && previous !== signature && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) {
-            const agentMessage = runMessages(run, id).find((message) => message.id === `${run.id}:agent`);
+            for (const message of runMessages(run, id, replyErrors.get(run.id))) listener({ type: "message.created", message });
+          } else if (!updateStreamRun && !establishingBaseline && previous !== signature && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) {
+            const agentMessage = runMessages(run, id, replyErrors.get(run.id)).find((message) => message.id === `${run.id}:agent`);
             if (agentMessage) listener({ type: "message.updated", message: agentMessage });
           }
-          if (!establishingBaseline && previous !== signature && terminalRunStatuses.has(run.status) && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) listener({ type: "message.completed", messageId: `${run.id}:agent` });
+          if (!updateStreamRun && !establishingBaseline && previous !== signature && terminalRunStatuses.has(run.status) && (assistantStreams.get(run.id)?.seen.size ?? 0) === 0) listener({ type: "message.completed", messageId: `${run.id}:agent` });
         }
         baselineReady = true;
         listener({ type: "connection.changed", state: "connected" });
@@ -378,7 +437,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     const refreshListeners = this.conversationRefreshListeners.get(id) ?? new Set<() => void>(); refreshListeners.add(refreshWhenActive); this.conversationRefreshListeners.set(id, refreshListeners);
     void poll(); const timer = window.setInterval(refreshWhenActive, RUN_FALLBACK_REFRESH_MS);
     window.addEventListener("focus", refreshWhenActive); window.addEventListener("online", refreshWhenActive); document.addEventListener("visibilitychange", onVisibilityChange);
-    return { unsubscribe: () => { window.clearInterval(timer); window.removeEventListener("focus", refreshWhenActive); window.removeEventListener("online", refreshWhenActive); document.removeEventListener("visibilitychange", onVisibilityChange); refreshListeners.delete(refreshWhenActive); if (refreshListeners.size === 0) this.conversationRefreshListeners.delete(id); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); assistantStreams.clear(); } };
+    return { unsubscribe: () => { window.clearInterval(timer); window.removeEventListener("focus", refreshWhenActive); window.removeEventListener("online", refreshWhenActive); document.removeEventListener("visibilitychange", onVisibilityChange); refreshListeners.delete(refreshWhenActive); if (refreshListeners.size === 0) this.conversationRefreshListeners.delete(id); for (const unsubscribe of streams.values()) unsubscribe(); streams.clear(); assistantStreams.clear(); streamRunUpdates.clear(); } };
   }
   async listApprovalRequests(_agentId?: string, _signal?: AbortSignal): Promise<ApprovalRequest[]> { void _agentId; void _signal; return []; }
   async respondToApproval(_input: RespondApprovalInput, _signal?: AbortSignal): Promise<ApprovalRequest> { void _input; void _signal; throw new CrewError("contract_pending", "ACP approvals require the Cloud Agents approval contract"); }
