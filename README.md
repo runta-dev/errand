@@ -38,10 +38,12 @@ npm ci
 npm run dev
 ```
 
-The development app connects to:
+The app defaults to:
 
-- Cloud Agents API: `https://api.runta.com`
-- Runta Dashboard: `https://dashboard.runta.com`
+- Cloud Agents API: `https://api.runta.me`
+- Runta Dashboard: `https://dashboard.runta.me`
+
+Development builds can override these addresses in Connection settings. The E2E script accepts a `RUNTA_CREW_E2E_ENDPOINT` override.
 
 Runta Crew uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
 

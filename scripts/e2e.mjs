@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-const endpoint = (process.env.RUNTA_CREW_E2E_ENDPOINT || "https://api.runta.com").replace(/\/+$/, "");
+const endpoint = (process.env.RUNTA_CREW_E2E_ENDPOINT || "https://api.runta.me").replace(/\/+$/, "");
 const token = process.env.RUNTA_CREW_E2E_TOKEN;
 if (!token) throw new Error("RUNTA_CREW_E2E_TOKEN is required");
 

@@ -156,10 +156,10 @@ ipcMain.handle("auth:logout", async () => {
 ipcMain.handle("auth:start", async () => {
   if (!settings.endpoint || !settings.dashboardUrl) throw new Error("API and Dashboard URLs are required");
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
-  const response = await net.fetch(new URL("v2/auth/device/authorization", apiBase).toString(), {
+  const response = await net.fetch(deviceAuthorizationUrl(apiBase), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_id: "runta_crew", device_name: `Runta Crew on ${process.platform}`, app_url: settings.dashboardUrl.replace(/\/+$/, "") }),
+    body: JSON.stringify(deviceAuthorizationRequest(`Runta Crew on ${process.platform}`, settings.dashboardUrl)),
   });
   if (!response.ok) throw new Error(`Device authorization failed (${response.status})`);
   const envelope = await response.json() as { data: { device_code: string; user_code: string; verification_uri_complete: string; expires_at: string; interval: number } };
@@ -172,7 +172,7 @@ ipcMain.handle("auth:start", async () => {
       if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) { authorizationStatus = "expired"; return; }
       let tokenResponse: Response;
       try {
-        tokenResponse = await net.fetch(new URL("v2/auth/device/token", apiBase).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_code: envelope.data.device_code }) });
+        tokenResponse = await net.fetch(deviceTokenUrl(apiBase), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(deviceTokenRequest(envelope.data.device_code)) });
       } catch {
         continue;
       }
