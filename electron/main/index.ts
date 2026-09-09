@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationStatus } from "../../src/shared/desktop";
 import { DEFAULT_RUNTA_API_URL, DEFAULT_RUNTA_DASHBOARD_URL, deviceAuthorizationRequest, deviceAuthorizationUrl, deviceTokenRequest, deviceTokenUrl, normalizeRuntaApiUrl, normalizeRuntaDashboardUrl } from "../../src/shared/runtaEndpoints";
 import { cloudRunEventsPath } from "../../src/shared/cloudStreamPath";
+import { VncOriginGrants, type VncOriginContext } from "./vncOrigin";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -18,6 +19,12 @@ const cloudStreams = new Map<string, AbortController>();
 const cloudStreamSenders = new Set<number>();
 let mainWindow: BrowserWindow | undefined;
 let pendingDeepLinkAgentId: string | undefined;
+const vncOriginGrants = new VncOriginGrants();
+
+function vncOriginContext(): VncOriginContext | undefined {
+  if (!mainWindow || mainWindow.isDestroyed() || !settings.dashboardUrl) return;
+  return { endpoint: settings.endpoint, dashboardUrl: settings.dashboardUrl, rendererUrl: mainWindow.webContents.getURL(), webContentsId: mainWindow.webContents.id };
+}
 
 app.setName("Runta Crew");
 
@@ -60,7 +67,12 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
-  mainWindow = window; window.on("closed", () => { if (mainWindow === window) mainWindow = undefined; });
+  mainWindow = window; window.on("closed", () => { if (mainWindow === window) { mainWindow = undefined; vncOriginGrants.clear(); } });
+  window.webContents.session.webRequest.onBeforeSendHeaders({ urls: ["wss://*/*"], types: ["webSocket"] }, (details, callback) => {
+    const context = vncOriginContext();
+    const requestHeaders = context ? vncOriginGrants.headersFor(details, context) : undefined;
+    callback(requestHeaders ? { requestHeaders } : {});
+  });
   if (isDev && devServerUrl) void window.loadURL(devServerUrl);
   else void window.loadFile(join(__dirname, "../renderer/index.html"));
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -114,11 +126,13 @@ ipcMain.handle("desktop:openExternal", (_event, url: string) => {
 });
 ipcMain.handle("settings:get", () => settings);
 ipcMain.handle("settings:set", (_event, next: AppSettings) => {
+  vncOriginGrants.clear();
   settings = { ...next, endpoint: isDev ? next.endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? next.dashboardUrl : defaultSettings.dashboardUrl };
   writeFileSync(settingsFile(), JSON.stringify(settings, null, 2), { mode: 0o600 }); return settings;
 });
 ipcMain.handle("credentials:has", () => existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0);
 ipcMain.handle("credentials:set", (_event, token: string | null) => {
+  vncOriginGrants.clear();
   if (!token) { if (existsSync(credentialFile())) rmSync(credentialFile()); authorizationStatus = "idle"; return false; }
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
   writeFileSync(credentialFile(), safeStorage.encryptString(token), { mode: 0o600 });
@@ -126,6 +140,7 @@ ipcMain.handle("credentials:set", (_event, token: string | null) => {
 });
 ipcMain.handle("auth:status", () => authorizationStatus);
 ipcMain.handle("auth:logout", async () => {
+  vncOriginGrants.clear();
   if (!existsSync(credentialFile()) || readFileSync(credentialFile()).length === 0) { authorizationStatus = "idle"; return true; }
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
   if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
@@ -133,6 +148,7 @@ ipcMain.handle("auth:logout", async () => {
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
   const response = await net.fetch(new URL("v2/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
   if (!response.ok && response.status !== 401) throw new Error(`Runta key revocation failed (${response.status})`);
+  vncOriginGrants.clear();
   if (existsSync(credentialFile())) rmSync(credentialFile());
   authorizationStatus = "idle";
   return true;
@@ -163,6 +179,7 @@ ipcMain.handle("auth:start", async () => {
       if (tokenResponse.ok) {
         const token = await tokenResponse.json() as { access_token: string };
         if (!safeStorage.isEncryptionAvailable()) { authorizationStatus = "error"; return; }
+        vncOriginGrants.clear();
         writeFileSync(credentialFile(), safeStorage.encryptString(token.access_token), { mode: 0o600 });
         authorizationStatus = "authorized";
         if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
@@ -180,7 +197,7 @@ ipcMain.handle("auth:start", async () => {
   await shell.openExternal(envelope.data.verification_uri_complete);
   return { verificationUrl: envelope.data.verification_uri_complete, userCode: envelope.data.user_code, expiresAt: envelope.data.expires_at };
 });
-ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
+ipcMain.handle("cloud:request", async (event, request: CloudRequest) => {
   if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
   if (!existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("Runta API token is not configured");
   const encrypted = readFileSync(credentialFile());
@@ -190,14 +207,23 @@ ipcMain.handle("cloud:request", async (_event, request: CloudRequest) => {
   const url = new URL(request.path.replace(/^\/+/, ""), endpoint);
   const apiPrefix = `${endpoint.pathname.replace(/\/+$/, "")}/v2/`;
   if (url.origin !== endpoint.origin || !url.pathname.startsWith(apiPrefix)) throw new Error("Cloud request path is not allowed");
+  const vncContext = vncOriginContext();
+  const vncRevision = vncOriginGrants.revision;
+  const isComputerSessionRequest = request.method === "POST" && /^agents\/[^/]+\/computer-sessions$/.test(url.pathname.slice(apiPrefix.length));
   const response = await net.fetch(url.toString(), {
     method: request.method,
+    ...(isComputerSessionRequest ? { redirect: "error" as const } : {}),
     headers: { authorization: `Bearer ${token}`, ...(request.body === undefined ? {} : { "content-type": "application/json" }) },
     body: request.body === undefined ? undefined : JSON.stringify(request.body),
   });
   const text = await response.text();
   let body: unknown;
   if (text) { try { body = JSON.parse(text) as unknown; } catch { body = text; } }
+  // Electron net.fetch does not populate Response.url reliably; reject redirects
+  // for session requests and retain the validated original URL instead.
+  if (isComputerSessionRequest && vncContext?.webContentsId === event.sender.id && event.senderFrame === event.sender.mainFrame) {
+    body = vncOriginGrants.remember({ url: url.href, method: request.method, status: response.status, body }, vncContext, vncRevision, randomUUID()) ?? body;
+  }
   return { status: response.status, body };
 });
 ipcMain.on("cloud:stream:subscribe", (event, value: { subscriptionId?: unknown; path?: unknown }) => {

@@ -13,6 +13,7 @@ vi.mock("@novnc/novnc/lib/rfb.js", () => ({
 }));
 
 import { VncDesktop } from "./VncDesktop";
+import { DetailPanel } from "./DetailPanel";
 import { canvasHasVisualFrame } from "./vncFrame";
 
 beforeEach(() => { instances.splice(0); constructor.mockClear(); });
@@ -61,4 +62,65 @@ it("waits for a framebuffer before treating VNC as ready", async () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   } finally { getContext.mockRestore(); vi.useRealTimers(); }
+});
+
+it("times out a stalled handshake and ignores a late connect event", async () => {
+  vi.useFakeTimers();
+  const rendered = render(<VncDesktop session={{ url: "wss://vnc.example.test/", protocols: [], mode: "remote" }} onClose={vi.fn()} onReconnect={vi.fn()} />);
+  try {
+    await vi.waitFor(() => expect(instances).toHaveLength(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(screen.getByText("Cloud computer connection timed out.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+    expect(instances[0].disconnect).toHaveBeenCalledOnce();
+    act(() => instances[0].dispatchEvent(new CustomEvent("connect")));
+    expect(screen.queryByText("Connecting…")).not.toBeInTheDocument();
+  } finally { rendered.unmount(); vi.useRealTimers(); }
+});
+
+it("keeps the first-frame deadline separate from the handshake deadline", async () => {
+  vi.useFakeTimers();
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ getImageData: () => ({ data: Uint8ClampedArray.from([0, 0, 0, 0]) }) } as unknown as CanvasRenderingContext2D);
+  const rendered = render(<VncDesktop session={{ url: "wss://vnc.example.test/", protocols: [], mode: "remote" }} onClose={vi.fn()} onReconnect={vi.fn()} />);
+  try {
+    await vi.waitFor(() => expect(instances).toHaveLength(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_000); });
+    act(() => instances[0].dispatchEvent(new CustomEvent("connect")));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.getByText("Connecting…")).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(screen.getByText("Cloud computer did not produce a video frame.")).toBeInTheDocument();
+    expect(instances[0].disconnect).toHaveBeenCalledOnce();
+  } finally { rendered.unmount(); getContext.mockRestore(); vi.useRealTimers(); }
+});
+
+it("explains unsupported VNC credential requests instead of waiting indefinitely", async () => {
+  render(<VncDesktop session={{ url: "wss://vnc.example.test/", protocols: [], mode: "remote" }} onClose={vi.fn()} onReconnect={vi.fn()} />);
+  await waitFor(() => expect(instances).toHaveLength(1));
+  act(() => instances[0].dispatchEvent(new CustomEvent("credentialsrequired", { detail: { types: ["password"] } })));
+  expect(screen.getByText("Cloud computer requires VNC credentials that Runta Crew cannot provide.")).toBeInTheDocument();
+  expect(instances[0].disconnect).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+});
+
+it.each(["ticket", "connection"])("stops automatic preview retries after a %s failure and retries from the existing screen button", async (failure) => {
+  const computerAction = vi.fn(async () => ({ url: "wss://vnc.example.test/", protocols: [], mode: "remote" as const }));
+  if (failure === "ticket") computerAction.mockRejectedValueOnce(new Error("Ticket failed"));
+  const rendered = render(<DetailPanel open width={340} onResize={vi.fn()} agentName="Atlas" computer={{ id: "computer-1", agentId: "agent-1", runtimeName: "computer-1", status: "online", capabilities: ["open"] }} approvals={[]} onApproval={vi.fn()} onComputerAction={computerAction} onClose={vi.fn()} />);
+  if (failure === "connection") {
+    await waitFor(() => expect(instances).toHaveLength(1));
+    act(() => instances[0].dispatchEvent(new CustomEvent("disconnect", { detail: { clean: false } })));
+  }
+  expect(await screen.findByText("Screen unavailable")).toBeInTheDocument();
+  expect(computerAction).toHaveBeenCalledOnce();
+  expect(rendered.container.querySelector(".screen-trigger button")).toBeNull();
+
+  await userEvent.click(screen.getByRole("button", { name: "Open Atlas's screen" }));
+
+  expect(await screen.findByRole("dialog", { name: "Cloud computer" })).toBeInTheDocument();
+  await waitFor(() => expect(instances).toHaveLength(failure === "connection" ? 2 : 1));
+  expect(computerAction).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("button", { name: "Minimize cloud computer" }));
+  await waitFor(() => expect(instances).toHaveLength(failure === "connection" ? 3 : 2));
+  expect(computerAction).toHaveBeenCalledTimes(3);
 });
