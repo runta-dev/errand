@@ -3,6 +3,19 @@ name: Publish macOS Release
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      ref:
+        type: string
+        required: false
+        default: ''
+      dry_run:
+        type: boolean
+        required: false
+        default: true
   workflow_dispatch:
     inputs:
       tag:
@@ -24,7 +37,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
+  group: ${{ github.workflow }}-${{ inputs.tag || github.event.release.tag_name }}
   cancel-in-progress: false
 
 jobs:
@@ -61,7 +74,7 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && (inputs.ref || github.ref_name) || github.event.release.tag_name || inputs.tag }}
+          ref: ${{ inputs.dry_run && (inputs.ref || github.sha) || inputs.tag || github.event.release.tag_name }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -74,9 +87,9 @@ jobs:
       - name: Validate release source and version
         id: release
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
           MANUAL_REF: ${{ inputs.ref }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
         run: |
           set -euo pipefail
           node --input-type=module <<'JS'
