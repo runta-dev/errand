@@ -77,7 +77,7 @@ Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents,
 
 The [release workflow](.github/workflows/publish-release.yml) runs `npm run package:release`. Public releases require a real **Developer ID Application** certificate, successful Apple notarization, and stapled app and DMG tickets. ULMO level 9 compression happens before final DMG signing; release hashes, blockmaps, and update metadata must describe the final artifacts.
 
-An administrator must create the `apple-release` environment in **runta-dev/runta-crew → Settings → Environments** and configure:
+An organization administrator must configure these values in **runta-dev → Settings → Secrets and variables → Actions**, using the organization-level Secrets and Variables tabs:
 
 | Kind | Name | Value |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ An administrator must create the `apple-release` environment in **runta-dev/runt
 | Variable | `APPLE_NOTARY_KEY_ID` | The API key's Key ID. |
 | Variable | `APPLE_NOTARY_ISSUER_ID` | The team's Issuer ID. |
 
-These names follow the [Runta CLI release workflow](https://github.com/runta-dev/runta/blob/integration/.github/workflows/publish-release.yml). Environment secrets belong to their repository: Crew does not inherit the `runta` repository's `apple-release` configuration. If using organization secrets, explicitly grant `runta-dev/runta-crew` access and configure the variables in Crew's environment.
+These names follow the [Runta CLI release workflow](https://github.com/runta-dev/runta/blob/integration/.github/workflows/publish-release.yml). For both secrets and variables, set **Repository access → Selected repositories** and include `runta-crew`, preserving access for existing consumers such as `runta`. The workflow reads organization-level values through the same `secrets` and `vars` contexts. Its `apple-release` environment remains the release job's environment; no duplicate repository or environment values are needed.
 
 On macOS, copy each encoded file directly to the clipboard, then paste it into the matching GitHub secret before running the next command:
 
