@@ -39,7 +39,7 @@ export function verifyGatekeeperAssessment(output) {
   assert.match(output, /^source=Notarized Developer ID$/m, "Gatekeeper must accept the notarized signature, not a local security override");
 }
 
-export function signingCommandFailure(command, operation, code, stderr, sensitive) {
+export function signingCommandFailure(command, operation, code, stderr, sensitive, redactions = []) {
   const label = command === "security" ? `${command} ${operation}` : command;
   let detail = stderr || "";
   if (sensitive) {
@@ -54,7 +54,14 @@ export function signingCommandFailure(command, operation, code, stderr, sensitiv
       ["specified item could not be found", "The signing keychain item could not be found."],
       ["One or more parameters", "macOS rejected a signing keychain parameter."]
     ];
-    detail = diagnostics.find(([native]) => detail.includes(native))?.[1] ?? "Native diagnostic omitted because this command handles credentials.";
+    const known = diagnostics.find(([native]) => detail.includes(native))?.[1];
+    // security's stderr contains OSStatus diagnostics, not the imported data.
+    // Keep only its diagnostic lines and scrub credentials before reporting an
+    // unfamiliar error; never use execFile's error.message (which includes argv).
+    const native = detail.split("\n").filter((line) => /^security: /.test(line)).join("\n");
+    const secrets = redactions.flatMap((value) => [value, ...value.split(/\r?\n/)]).filter(Boolean).sort((left, right) => right.length - left.length);
+    const sanitized = secrets.reduce((value, secret) => value.replaceAll(secret, "[redacted]"), native);
+    detail = known ?? (sanitized || "Native diagnostic omitted because this command handles credentials.");
   }
   return `${label} failed (exit ${code ?? "unknown"})${detail ? `\n${detail}` : ""}`;
 }
@@ -82,7 +89,7 @@ export async function packageRelease() {
     try { return await execute(command, args, { cwd: project, maxBuffer: 16 * 1024 * 1024 }); }
     catch (error) {
       // execFile's error message includes argv, including keychain passwords.
-      throw new Error(signingCommandFailure(command, args[0], error.code, error.stderr || error.stdout, sensitive));
+      throw new Error(signingCommandFailure(command, args[0], error.code, sensitive ? error.stderr : error.stderr || error.stdout, sensitive, [...Object.values(credentials), keychainPassword]));
     }
   };
   const verifySignature = async (file, application = false) => {

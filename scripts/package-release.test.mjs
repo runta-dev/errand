@@ -8,6 +8,10 @@ describe("Apple release admission", () => {
     expect(failure).toContain("APPLE_CERTIFICATE_PASSWORD");
     expect(failure).not.toContain("secret-material");
     expect(signingCommandFailure("security", "unlock-keychain", 1, "unknown secret-material", true)).not.toContain("secret-material");
+    const unknown = signingCommandFailure("security", "import", 1, "security: SecKeychainItemImport: Unable to decode the provided data. secret-material\nunrelated output", true, ["secret-material"]);
+    expect(unknown).toContain("Unable to decode the provided data.");
+    expect(unknown).not.toContain("secret-material");
+    expect(unknown).not.toContain("unrelated output");
   });
 
   it("reports missing configuration names without echoing credential material", () => {
