@@ -1,7 +1,11 @@
 {
   "name": "runta-crew",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runta-dev/runta-crew.git"
+  },
   "type": "module",
   "main": "out/main/index.js",
   "description": "Desktop client for Runta Cloud Agents",
@@ -13,7 +17,8 @@
     "dev": "node scripts/rebrand-electron.mjs && electron-vite dev",
     "postinstall": "node scripts/ensure-electron.mjs",
     "build": "electron-vite build",
-    "package": "npm run build && electron-builder --mac --publish never",
+    "package": "npm run build && electron-builder --mac --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false && node scripts/compress-dmg.mjs",
+    "package:release": "node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
@@ -22,6 +27,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.5.0",
     "@vitejs/plugin-react": "^5.0.4",
     "boring-avatars": "^2.0.4",
     "clsx": "^2.1.1",
@@ -40,14 +46,16 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "app-builder-lib": "26.15.3",
     "electron": "^44.0.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "26.15.3",
     "electron-vite": "^4.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "jsdom": "^26.1.0",
+    "js-yaml": "4.3.1",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.48.1",
     "vite": "^7.0.0",
@@ -81,7 +89,9 @@
           ]
         }
       ],
-      "identity": null
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     }
   }
 }

@@ -6,9 +6,34 @@ import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
 import { AgentList } from "./components/AgentList";
 import { LoginPage } from "./components/LoginPage";
-import type { DesktopBridge } from "@/shared/desktop";
+import { SettingsDialog } from "./components/Dialogs";
+import type { AppSettings, DesktopBridge } from "@/shared/desktop";
 
 describe("Runta Crew authentication surfaces", () => {
+  it("opens the dashboard add-provider page when no providers exist", async () => {
+    const openExternal = vi.fn(async () => undefined); const user = userEvent.setup();
+    window.runtaCrew = {
+      openExternal,
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
+    } as unknown as DesktopBridge;
+    render(<SettingsDialog organizationId="org-a/b" providers={[]} onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Add model provider" }));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(openExternal).toHaveBeenCalledWith("https://app.forge/org/org-a%2Fb/secrets/providers/new");
+    delete window.runtaCrew;
+  });
+
+  it("notifies when the model-provider picker opens", async () => {
+    const onModelProviderOpen = vi.fn(); const user = userEvent.setup();
+    window.runtaCrew = {
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
+    } as unknown as DesktopBridge;
+    render(<SettingsDialog providers={[]} onModelProviderOpen={onModelProviderOpen} onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Add model provider" }));
+    expect(onModelProviderOpen).toHaveBeenCalledOnce();
+    delete window.runtaCrew;
+  });
+
   it("adapts the landing copy to whether agents exist", () => {
     const { rerender } = render(<AgentsLanding hasAgents={false} />);
     expect(screen.getByText("Create your first agent to get started.")).toBeInTheDocument();
@@ -34,7 +59,7 @@ describe("Runta Crew authentication surfaces", () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async (url) => { opened.push(url); },
       settings: { get: async () => ({ endpoint: "", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [] },
+      credentials: { has: async () => false, set: async () => true }, attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
     };
@@ -52,9 +77,11 @@ describe("Runta Crew authentication surfaces", () => {
   });
 
   it("shows immediate feedback while an agent is being created", () => {
-    render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
-    expect(screen.getByRole("status")).toHaveTextContent("AtlasCreating…");
+    const { rerender } = render(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("status", { name: "Atlas is being created" })).toHaveTextContent("AtlasCreating…");
     expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+    rerender(<AgentList agents={[]} selectedId="" search="" creatingAgentName="Atlas" creatingAgentPhase="typing" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("status", { name: "Atlas is typing" })).toBeInTheDocument();
   });
 
   it("does not duplicate a creating row when polling sees the new server agent first", () => {
@@ -93,7 +120,7 @@ describe("Runta Crew authentication surfaces", () => {
     const bridge: DesktopBridge = {
       getVersion: async () => "0.1.0", openExternal: async () => undefined,
       settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
-      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [] },
+      credentials: { has: async () => false, set: async () => false }, attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) },
       cloud: { request: cloudRequest, subscribe: () => () => undefined },
       notifications: { show: async () => true, setBadge: async () => undefined },
       deepLinks: { onOpenAgent: () => () => undefined },
@@ -113,7 +140,7 @@ describe("Runta Crew authentication surfaces", () => {
       settings: { get: async () => ({ endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true }), set: async (settings) => settings },
       credentials: { has: async () => false, set: async () => false },
       auth: { start: async () => { throw new Error("Error invoking remote method 'auth:start': Error: Device authorization failed (401)"); }, status: async () => "error", logout: async () => true },
-      attachments: { choose: async () => [] }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
+      attachments: { choose: async () => [], addImage: async (image) => ({ id: "image", name: image.name, size: 0, mediaType: image.mediaType }), read: async () => ({ name: "test.txt", mediaType: "text/plain", base64: "" }) }, notifications: { show: async () => true, setBadge: async () => undefined }, deepLinks: { onOpenAgent: () => () => undefined },
     };
     window.runtaCrew = bridge;
     const user = userEvent.setup(); render(<App />);

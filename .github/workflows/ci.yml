@@ -2,10 +2,24 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      signed_release:
+        description: Build signed and notarized macOS dry-run artifacts after verification.
+        type: boolean
+        required: false
+        default: false
+      release_tag:
+        description: Required for signed_release; must match package.json, with or without v.
+        type: string
+        required: false
+        default: ''
   pull_request:
   push:
     branches: [main]
     tags: ["*"]
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -22,23 +36,15 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  artifact:
-    if: startsWith(github.ref, 'refs/tags/')
+  signed_release:
+    name: Signed macOS dry-run
+    if: github.event_name == 'workflow_dispatch' && inputs.signed_release
     needs: verify
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run package
-      - run: npm run smoke
-      - uses: actions/upload-artifact@v4
-        with:
-          name: runta-crew-macos-arm64
-          path: |
-            release/*.dmg
-            release/*.zip
-          if-no-files-found: error
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-release.yml
+    with:
+      tag: ${{ inputs.release_tag }}
+      ref: ${{ github.sha }}
+      dry_run: true
+    secrets: inherit
