@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 const appBinary = join(process.cwd(), "release/mac-arm64/Runta Crew.app/Contents/MacOS/Runta Crew");
 if (!existsSync(appBinary)) throw new Error(`Packaged app is missing: ${appBinary}`);
+execFileSync("codesign", ["--verify", "--deep", "--strict", join(process.cwd(), "release/mac-arm64/Runta Crew.app")], { stdio: "pipe" });
 const smokeRoot = mkdtempSync(join(tmpdir(), "runta-crew-smoke-"));
 const marker = join(smokeRoot, "ready");
 const child = spawn(appBinary, [`--user-data-dir=${join(smokeRoot, "profile")}`], { env: { ...process.env, RUNTA_CREW_SMOKE_MARKER: marker }, stdio: "pipe" });

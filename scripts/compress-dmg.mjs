@@ -47,7 +47,7 @@ async function replacePrepared(files, staging) {
   }
 }
 
-export async function compressDmgRelease(outputDirectory, version) {
+export async function compressDmgRelease(outputDirectory, version, { finalizeImage } = {}) {
   const directory = path.resolve(outputDirectory);
   const manifestFile = path.join(directory, "latest-mac.yml");
   const originalManifest = await readFile(manifestFile, "utf8");
@@ -82,6 +82,9 @@ export async function compressDmgRelease(outputDirectory, version) {
       await execute("hdiutil", ["verify", converted]);
       assert.equal((await execute("hdiutil", ["imageinfo", "-format", converted])).stdout.trim(), "ULMO");
       assert.equal(await imageChecksum(converted), originalImageChecksum, "Compression changed the disk image contents");
+      // Signing and stapling mutate the container; complete them before hashing
+      // the downloadable artifact or generating its differential-update map.
+      if (finalizeImage) await finalizeImage(converted);
       // The explicit third argument creates a sidecar, without appending data to the DMG.
       const info = await buildBlockMap(converted, "gzip", blockmap);
       assert.equal(info.size, (await stat(converted)).size);

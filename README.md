@@ -69,9 +69,41 @@ npm run package
 npm run smoke
 ```
 
-Artifacts are written to `release/`. Local builds are ad-hoc signed; public distribution requires Runta signing, notarization, and an approved update channel.
+Artifacts are written to `release/`. `npm run package` creates ad-hoc signed builds for local testing; these are not public distribution artifacts.
 
-Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Runta Crew requires macOS 13 or later. ZIP artifacts remain unchanged.
+Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Runta Crew requires macOS 13 or later. The DMG compression step leaves ZIP artifacts unchanged.
+
+## Signed macOS releases
+
+The [release workflow](.github/workflows/publish-release.yml) runs `npm run package:release`. Public releases require a real **Developer ID Application** certificate, successful Apple notarization, and stapled app and DMG tickets. ULMO level 9 compression happens before final DMG signing; release hashes, blockmaps, and update metadata must describe the final artifacts.
+
+An administrator must create the `apple-release` environment in **runta-dev/runta-crew → Settings → Environments** and configure:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `APPLE_CERTIFICATE_BASE64` | Base64 of a Developer ID Application `.p12` export containing its private key. |
+| Secret | `APPLE_CERTIFICATE_PASSWORD` | Password protecting that `.p12` export. |
+| Secret | `APPLE_NOTARY_KEY_BASE64` | Base64 of an App Store Connect team API key `.p8` file. |
+| Variable | `APPLE_NOTARY_KEY_ID` | The API key's Key ID. |
+| Variable | `APPLE_NOTARY_ISSUER_ID` | The team's Issuer ID. |
+
+These names follow the [Runta CLI release workflow](https://github.com/runta-dev/runta/blob/integration/.github/workflows/publish-release.yml). Environment secrets belong to their repository: Crew does not inherit the `runta` repository's `apple-release` configuration. If using organization secrets, explicitly grant `runta-dev/runta-crew` access and configure the variables in Crew's environment.
+
+On macOS, copy each encoded file directly to the clipboard, then paste it into the matching GitHub secret before running the next command:
+
+```bash
+# Paste into APPLE_CERTIFICATE_BASE64.
+base64 < "/path/to/DeveloperIDApplication.p12" | tr -d '\n' | pbcopy
+
+# Paste into APPLE_NOTARY_KEY_BASE64.
+base64 < "/path/to/AuthKey.p8" | tr -d '\n' | pbcopy
+```
+
+Enter the certificate password directly in GitHub's secret form. Keep private keys and passwords out of commits, logs, terminal arguments, and chat.
+
+Once the workflow is on the repository's default branch, **Actions → Publish macOS Release** provides manual runs with `dry_run=true` by default. Enter a tag matching `package.json`'s version, with an optional `v` prefix. The optional `ref` override is available only for dry runs; otherwise the workflow builds the release tag.
+
+A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `runta-crew-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
 
 ## Under the hood
 

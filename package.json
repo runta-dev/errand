@@ -1,6 +1,6 @@
 {
   "name": "runta-crew",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -13,7 +13,8 @@
     "dev": "node scripts/rebrand-electron.mjs && electron-vite dev",
     "postinstall": "node scripts/ensure-electron.mjs",
     "build": "electron-vite build",
-    "package": "npm run build && electron-builder --mac --publish never && node scripts/compress-dmg.mjs",
+    "package": "npm run build && electron-builder --mac --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false && node scripts/compress-dmg.mjs",
+    "package:release": "node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
@@ -84,7 +85,9 @@
           ]
         }
       ],
-      "identity": null
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     }
   }
 }
