@@ -39,6 +39,26 @@ export function verifyGatekeeperAssessment(output) {
   assert.match(output, /^source=Notarized Developer ID$/m, "Gatekeeper must accept the notarized signature, not a local security override");
 }
 
+export function signingCommandFailure(command, operation, code, stderr, sensitive) {
+  const label = command === "security" ? `${command} ${operation}` : command;
+  let detail = stderr || "";
+  if (sensitive) {
+    // Report known native diagnostics without ever copying arbitrary output from
+    // a credential-handling command (or execFile's argv-bearing error message).
+    const diagnostics = [
+      ["MAC verification failed", "PKCS#12 password verification failed; check APPLE_CERTIFICATE_PASSWORD."],
+      ["Unknown format", "The certificate is not a supported PKCS#12 export; check APPLE_CERTIFICATE_BASE64."],
+      ["User interaction is not allowed", "The signing keychain requires interaction."],
+      ["specified keychain already exists", "The temporary signing keychain already exists."],
+      ["specified keychain could not be found", "The temporary signing keychain could not be found."],
+      ["specified item could not be found", "The signing keychain item could not be found."],
+      ["One or more parameters", "macOS rejected a signing keychain parameter."]
+    ];
+    detail = diagnostics.find(([native]) => detail.includes(native))?.[1] ?? "Native diagnostic omitted because this command handles credentials.";
+  }
+  return `${label} failed (exit ${code ?? "unknown"})${detail ? `\n${detail}` : ""}`;
+}
+
 export async function packageRelease() {
   const credentials = releaseCredentials(process.env);
   assert.equal(process.platform, "darwin", "Signed macOS releases must be built on macOS");
@@ -62,8 +82,7 @@ export async function packageRelease() {
     try { return await execute(command, args, { cwd: project, maxBuffer: 16 * 1024 * 1024 }); }
     catch (error) {
       // execFile's error message includes argv, including keychain passwords.
-      const detail = sensitive ? "" : `\n${error.stderr || error.stdout || ""}`;
-      throw new Error(`${command} failed (exit ${error.code ?? "unknown"})${detail}`);
+      throw new Error(signingCommandFailure(command, args[0], error.code, error.stderr || error.stdout, sensitive));
     }
   };
   const verifySignature = async (file, application = false) => {

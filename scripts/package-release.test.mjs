@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { developerIdIdentity, releaseCredentials, verifyGatekeeperAssessment, verifySignatureDetails } from "./package-release.mjs";
+import { developerIdIdentity, releaseCredentials, signingCommandFailure, verifyGatekeeperAssessment, verifySignatureDetails } from "./package-release.mjs";
 
 describe("Apple release admission", () => {
+  it("identifies credential command failures without echoing native credential output", () => {
+    const failure = signingCommandFailure("security", "import", 1, "SecKeychainItemImport: MAC verification failed during PKCS12 import secret-material", true);
+    expect(failure).toContain("security import failed");
+    expect(failure).toContain("APPLE_CERTIFICATE_PASSWORD");
+    expect(failure).not.toContain("secret-material");
+    expect(signingCommandFailure("security", "unlock-keychain", 1, "unknown secret-material", true)).not.toContain("secret-material");
+  });
+
   it("reports missing configuration names without echoing credential material", () => {
     expect(() => releaseCredentials({ APPLE_CERTIFICATE_BASE64: "private-certificate" })).toThrow("APPLE_CERTIFICATE_PASSWORD");
     expect(() => releaseCredentials({ APPLE_CERTIFICATE_BASE64: "private-certificate" })).not.toThrow("private-certificate");
