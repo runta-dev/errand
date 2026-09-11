@@ -1,0 +1,170 @@
+name: Publish verified CI artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful Publish macOS Release run containing the signed artifacts.
+        type: string
+        required: true
+      notes:
+        description: Release notes in Markdown.
+        type: string
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-release-${{ inputs.source_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Promote signed artifacts without rebuilding
+    runs-on: ubuntu-24.04
+    environment: apple-release
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      RELEASE_NOTES: ${{ inputs.notes }}
+
+    steps:
+      - name: Verify the source run and artifact
+        id: source
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import fs from 'node:fs';
+          const repo = process.env.GITHUB_REPOSITORY;
+          const runId = process.env.SOURCE_RUN_ID;
+          assert.match(runId, /^\d+$/);
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', `repos/${repo}/${path}`], { encoding: 'utf8' }));
+          const run = api(`actions/runs/${runId}`);
+          assert.equal(run.repository.full_name, repo);
+          assert.equal(run.head_repository.id, run.repository.id);
+          assert.equal(run.path, '.github/workflows/publish-release.yml');
+          assert.equal(run.status, 'completed');
+          assert.equal(run.conclusion, 'success');
+          assert.match(run.head_sha, /^[a-f0-9]{40}$/);
+          const jobs = api(`actions/runs/${runId}/jobs?per_page=100`).jobs;
+          const signed = jobs.find(job => job.name === 'Sign and notarize macOS arm64');
+          assert.equal(signed?.conclusion, 'success');
+          for (const name of ['Verify source', 'Build signed and notarized release', 'Smoke-test packaged app and require final artifacts', 'Upload verified macOS artifacts']) {
+            assert.equal(signed.steps.find(step => step.name === name)?.conclusion, 'success', name);
+          }
+          const source = api(`contents/package.json?ref=${run.head_sha}`);
+          const { version } = JSON.parse(Buffer.from(source.content, 'base64').toString('utf8'));
+          assert.match(version, /^\d+\.\d+\.\d+$/);
+          const name = `errand-macos-arm64-${version}`;
+          const artifacts = api(`actions/runs/${runId}/artifacts?per_page=100`).artifacts.filter(artifact => artifact.name === name && !artifact.expired);
+          assert.equal(artifacts.length, 1, 'Require exactly one unexpired signed artifact');
+          const artifact = artifacts[0];
+          assert.equal(artifact.workflow_run.id, Number(runId));
+          assert.equal(artifact.workflow_run.head_sha, run.head_sha);
+          assert.match(artifact.digest, /^sha256:[a-f0-9]{64}$/);
+          const metadata = { repo, runId, sourceSha: run.head_sha, version, tag: `v${version}`, artifactId: artifact.id, artifactName: name, digest: artifact.digest };
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/errand-promotion.json`, JSON.stringify(metadata));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `artifact_id=${artifact.id}\nartifact_name=${name}\n`);
+          console.log(`Verified ${name} from ${run.head_sha}`);
+          JS
+
+      - name: Download the original CI archive and verify its digest
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import fs from 'node:fs';
+          const metadata = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/errand-promotion.json`, 'utf8'));
+          const archive = `${process.env.RUNNER_TEMP}/errand-ci-artifact.zip`;
+          const output = fs.openSync(archive, 'w');
+          try { execFileSync('gh', ['api', `repos/${metadata.repo}/actions/artifacts/${metadata.artifactId}/zip`], { stdio: ['ignore', output, 'pipe'] }); }
+          finally { fs.closeSync(output); }
+          const digest = createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+          assert.equal(`sha256:${digest}`, metadata.digest, 'CI archive digest mismatch');
+          const expected = [`Errand-${metadata.version}-arm64.dmg`, `Errand-${metadata.version}-arm64.dmg.blockmap`, `Errand-${metadata.version}-arm64-mac.zip`, `Errand-${metadata.version}-arm64-mac.zip.blockmap`, 'latest-mac.yml'];
+          const entries = execFileSync('unzip', ['-Z1', archive], { encoding: 'utf8' }).trim().split('\n');
+          assert.deepEqual(entries.sort(), expected.sort(), 'Unexpected archive entries');
+          const destination = `${process.env.RUNNER_TEMP}/errand-release-assets`;
+          fs.mkdirSync(destination);
+          execFileSync('unzip', ['-q', archive, '-d', destination]);
+          console.log('Original CI archive digest and asset list verified.');
+          JS
+
+      - name: Install the manifest parser
+        run: npm install --prefix "$RUNNER_TEMP/errand-release-tools" --ignore-scripts --no-package-lock --no-audit --no-fund js-yaml@4.3.1
+
+      - name: Verify assets and publish the release
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { createRequire } from 'node:module';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const require = createRequire(`${process.env.RUNNER_TEMP}/errand-release-tools/package.json`);
+          const yaml = require('js-yaml');
+          const metadata = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/errand-promotion.json`, 'utf8'));
+          const directory = `${process.env.RUNNER_TEMP}/errand-release-assets`;
+          const gh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
+          const api = (route) => JSON.parse(gh(['api', `repos/${metadata.repo}/${route}`]));
+          const manifest = yaml.load(fs.readFileSync(path.join(directory, 'latest-mac.yml'), 'utf8'));
+          assert.equal(manifest.version, metadata.version);
+          const zip = `Errand-${metadata.version}-arm64-mac.zip`;
+          const dmg = `Errand-${metadata.version}-arm64.dmg`;
+          assert.deepEqual(manifest.files.map(file => file.url).sort(), [zip, dmg].sort());
+          for (const file of manifest.files) {
+            const bytes = fs.readFileSync(path.join(directory, file.url));
+            assert.equal(bytes.length, file.size, file.url);
+            assert.equal(createHash('sha512').update(bytes).digest('base64'), file.sha512, file.url);
+          }
+          assert.equal(manifest.path, zip);
+          assert.equal(manifest.sha512, manifest.files.find(file => file.url === zip).sha512);
+          const assets = fs.readdirSync(directory).sort();
+          const expected = assets.map(name => {
+            const file = path.join(directory, name);
+            const stat = fs.lstatSync(file);
+            assert.ok(stat.isFile() && stat.size > 0, name);
+            return { name, size: stat.size, digest: `sha256:${createHash('sha256').update(fs.readFileSync(file)).digest('hex')}` };
+          });
+          const provenance = `CI run: https://github.com/${metadata.repo}/actions/runs/${metadata.runId}\nSource commit: ${metadata.sourceSha}\nArtifact: ${metadata.artifactName} (${metadata.artifactId})\nArchive digest: ${metadata.digest}`;
+          const notes = `${process.env.RELEASE_NOTES.trim()}\n\n### Build provenance\n\n${provenance}\n`;
+          const notesFile = `${process.env.RUNNER_TEMP}/errand-release-notes.md`;
+          fs.writeFileSync(notesFile, notes);
+          const releases = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${metadata.repo}/releases?per_page=100`])).flat();
+          const existing = releases.find(release => release.tag_name === metadata.tag);
+          if (existing) {
+            assert.equal(existing.draft, true, 'Refuse to overwrite a published release');
+            assert.equal(existing.target_commitish, metadata.sourceSha);
+            assert.ok(existing.body?.includes(provenance), 'Draft belongs to another promotion');
+          } else {
+            gh(['release', 'create', metadata.tag, '--repo', metadata.repo, '--target', metadata.sourceSha, '--title', `Errand ${metadata.version}`, '--notes-file', notesFile, '--draft']);
+          }
+          gh(['release', 'upload', metadata.tag, '--repo', metadata.repo, '--clobber', ...assets.map(name => path.join(directory, name))]);
+          const release = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${metadata.repo}/releases?per_page=100`])).flat().find(item => item.tag_name === metadata.tag);
+          assert.equal(release?.draft, true);
+          assert.equal(release.assets.length, expected.length);
+          for (const file of expected) {
+            const uploaded = release.assets.find(asset => asset.name === file.name);
+            assert.equal(uploaded?.size, file.size, file.name);
+            assert.equal(uploaded?.digest, file.digest, file.name);
+            assert.equal(uploaded?.state, 'uploaded', file.name);
+          }
+          // Refuse to publish against an existing tag pointing at different code.
+          const refResult = execFileSync('gh', ['api', `repos/${metadata.repo}/git/matching-refs/tags/${metadata.tag}`], { encoding: 'utf8' });
+          const exactRef = JSON.parse(refResult).find(ref => ref.ref === `refs/tags/${metadata.tag}`);
+          if (exactRef) assert.equal(api(`commits/${metadata.tag}`).sha, metadata.sourceSha);
+          gh(['release', 'edit', metadata.tag, '--repo', metadata.repo, '--draft=false', '--latest']);
+          assert.equal(api(`commits/${metadata.tag}`).sha, metadata.sourceSha);
+          const latest = api('releases/latest');
+          assert.equal(latest.id, release.id);
+          assert.equal(latest.draft, false);
+          assert.equal(latest.tag_name, metadata.tag);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Published [Errand ${metadata.version}](${latest.html_url}) from the original signed CI artifact. All five uploaded asset digests match.\n`);
+          console.log(latest.html_url);
+          JS
