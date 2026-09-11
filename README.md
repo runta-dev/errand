@@ -10,7 +10,7 @@ A desktop home for persistent AI teammates, powered by Runta.
 
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-181818?style=flat-square&logo=apple&logoColor=white)](#quick-start) [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-F07818?style=flat-square)](#quick-start) [![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Powered by Runta](https://img.shields.io/badge/Powered_by-Runta-F07818?style=flat-square)](https://runta.com/)
 
-**[Quick start](#quick-start)** · **[Releases](https://github.com/runta-dev/runta-crew/releases)** · **[How it works](#how-it-works)** · **[Discord](https://discord.gg/62d4bkaTnS)**
+**[Quick start](#quick-start)** · **[Releases](https://github.com/runta-dev/errand/releases)** · **[How it works](#how-it-works)** · **[Discord](https://discord.gg/62d4bkaTnS)**
 
 <img src="./docs/screenshots/errand.gif" width="960" alt="Errand demo: chat with cloud agents and view their computers" />
 
@@ -80,8 +80,8 @@ Browser-based authorization and OS-backed credential encryption, with a narrow b
 **macOS 13+ · Apple Silicon · Node.js 22–26 · npm 10+**
 
 ```bash
-git clone https://github.com/runta-dev/runta-crew.git
-cd runta-crew
+git clone https://github.com/runta-dev/errand.git
+cd errand
 npm ci
 npm run dev
 ```
@@ -129,7 +129,7 @@ The desktop client and Runta transport are separate layers. Connecting a differe
 
 ## Build with us
 
-Found a rough edge? [Open an issue](https://github.com/runta-dev/runta-crew/issues). Have an improvement? [Send a pull request](https://github.com/runta-dev/runta-crew/pulls).
+Found a rough edge? [Open an issue](https://github.com/runta-dev/errand/issues). Have an improvement? [Send a pull request](https://github.com/runta-dev/errand/pulls).
 
 Useful contributions include clearer activity and error states, more accessible interactions, and reproducible reports of connection or attachment problems. Include the steps to reproduce, what you expected, and what happened.
 
@@ -170,7 +170,7 @@ The DMG uses native ULMO (LZMA level 9) compression. Packaging verifies its cont
 
 The [release workflow](.github/workflows/publish-release.yml) runs `npm run package:release`. Public releases require a real **Developer ID Application** certificate, successful Apple notarization, and stapled app and DMG tickets. ULMO level 9 compression happens before final DMG signing; release hashes, blockmaps, and update metadata must describe the final artifacts.
 
-Configure these values in **runta-dev/runta-crew → Settings → Secrets and variables → Actions**, using **New repository secret** and **New repository variable**:
+Configure these values in **runta-dev/errand → Settings → Secrets and variables → Actions**, using **New repository secret** and **New repository variable**:
 
 | Kind | Name | Value |
 | --- | --- | --- |
@@ -180,7 +180,7 @@ Configure these values in **runta-dev/runta-crew → Settings → Secrets and va
 | Variable | `APPLE_NOTARY_KEY_ID` | The API key's Key ID. |
 | Variable | `APPLE_NOTARY_ISSUER_ID` | The team's Issuer ID. |
 
-These names follow the [Runta CLI release workflow](https://github.com/runta-dev/runta/blob/integration/.github/workflows/publish-release.yml). Store all five values at repository scope in `runta-crew`; the workflow reads them through its existing `secrets` and `vars` contexts. Its `apple-release` environment remains the release job's environment, with no duplicate values required there.
+These names follow the [Runta CLI release workflow](https://github.com/runta-dev/runta/blob/integration/.github/workflows/publish-release.yml). Store all five values at repository scope in `errand`; the workflow reads them through its existing `secrets` and `vars` contexts. Its `apple-release` environment remains the release job's environment, with no duplicate values required there.
 
 On macOS, copy each encoded file directly to the clipboard, then paste it into the matching GitHub secret before running the next command:
 
@@ -219,7 +219,7 @@ The project is built with [Electron](https://www.electronjs.org/), [React](https
 
 <div align="center">
 
-**If Errand earns a place in your Dock, [give it a star](https://github.com/runta-dev/runta-crew). ⭐**
+**If Errand earns a place in your Dock, [give it a star](https://github.com/runta-dev/errand). ⭐**
 
 Built by [Runta](https://runta.com/) · [Join the conversation](https://discord.gg/62d4bkaTnS)
 

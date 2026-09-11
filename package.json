@@ -4,7 +4,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/runta-dev/runta-crew.git"
+    "url": "https://github.com/runta-dev/errand.git"
   },
   "type": "module",
   "main": "out/main/index.js",
