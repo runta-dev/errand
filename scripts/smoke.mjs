@@ -18,8 +18,11 @@ while (!existsSync(marker) && Date.now() < deadline) await new Promise((resolve)
 if (!existsSync(marker)) { child.kill(); throw new Error("Packaged app did not finish loading within 20 seconds"); }
 const result = JSON.parse(readFileSync(marker, "utf8"));
 assert.equal(result.ready, true);
+assert.equal(result.applicationName, appName, "Electron must use the Errand safeStorage keychain namespace");
+assert.equal(result.userData, join(smokeRoot, "profile"));
+assert.equal(result.sessionData, result.userData, "Browser data must stay in the selected profile");
 assert.equal(result.windowTitle, appName);
 assert.equal(new URL(result.rendererUrl).protocol, "file:");
 assert.equal(result.rendererOrigin, "file://");
 assert.equal(result.vncOrigin, result.rendererOrigin, "VNC must use the packaged renderer's native Origin");
-console.log("Native smoke passed: packaged renderer loaded with the correct VNC Origin.");
+console.log("Native smoke passed: Errand storage identity, isolated profile, and packaged VNC Origin verified.");

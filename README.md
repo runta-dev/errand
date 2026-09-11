@@ -113,7 +113,7 @@ The Errand [SVG icon](src/assets/errand-icon.svg) uses the same `beam` variant o
 
 ## Upgrade compatibility
 
-Quit Runta Crew before opening Errand for the first time. Errand keeps the existing `com.runta.crew` application identity and `Runta Crew` local profile and keychain namespace so upgrades retain settings, credentials, and browser data. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.
+Errand uses its own `Errand Safe Storage` macOS keychain entry and `~/Library/Application Support/Errand` profile. The first launch starts signed out; authorize Errand again to access your existing cloud agents. Legacy Runta Crew credentials, settings, and browser data remain untouched and are not migrated or decrypted. The `com.runta.crew` application identity stays unchanged for signed updates. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.
 
 ## Under the hood
 

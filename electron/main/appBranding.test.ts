@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { AGENT_LINK_SCHEMES, APP_DISPLAY_NAME, STORAGE_APPLICATION_NAME, agentIdFromDeepLink, nativeEnvironmentValue, storageDirectory } from "./appBranding";
 
 describe("Errand native branding compatibility", () => {
-  it("keeps the existing profile and keychain application name", () => {
+  it("uses an independent Errand profile and keychain application name", () => {
     expect(APP_DISPLAY_NAME).toBe("Errand");
-    expect(STORAGE_APPLICATION_NAME).toBe("Runta Crew");
-    expect(storageDirectory("/Users/example/Library/Application Support")).toBe("/Users/example/Library/Application Support/Runta Crew");
+    expect(STORAGE_APPLICATION_NAME).toBe("Errand");
+    expect(storageDirectory("/Users/example/Library/Application Support")).toBe("/Users/example/Library/Application Support/Errand");
     expect(storageDirectory("/Users/example/Library/Application Support", "/tmp/errand-smoke/profile")).toBe("/tmp/errand-smoke/profile");
     expect(storageDirectory("/Users/example/Library/Application Support", "custom-profile")).toBe(resolve("custom-profile"));
   });

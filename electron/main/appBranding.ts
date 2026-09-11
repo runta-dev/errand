@@ -2,8 +2,8 @@ import { join, resolve } from "node:path";
 
 export const APP_DISPLAY_NAME = "Errand";
 // Electron derives its macOS safeStorage keychain service/account from this
-// internal name. Keep it stable across the visible product rename.
-export const STORAGE_APPLICATION_NAME = "Runta Crew";
+// name. Errand owns a separate keychain and profile; do not decrypt legacy data.
+export const STORAGE_APPLICATION_NAME = "Errand";
 export const AGENT_LINK_SCHEMES = ["errand", "runta-crew"] as const;
 
 export function storageDirectory(appData: string, userDataOverride?: string): string {
