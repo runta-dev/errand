@@ -1,6 +1,6 @@
 import { ArrowRight, LoaderCircle, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import runtaIcon from "../../assets/runta-logo-icon.png";
+import errandIcon from "../../assets/errand-icon.svg";
 
 export function LoginPage({ status, error, allowConnectionSettings, onSignIn, onSettings }: { status: "idle" | "pending"; error?: string; allowConnectionSettings: boolean; onSignIn(): void; onSettings(): void }) {
   const [debugUnlocked, setDebugUnlocked] = useState(false); const controlPresses = useRef(0); const lastControlPress = useRef(0);
@@ -14,7 +14,7 @@ export function LoginPage({ status, error, allowConnectionSettings, onSignIn, on
   }, [allowConnectionSettings]);
   return <main className="login-page">
     <section className="login-panel" aria-labelledby="login-title">
-      <div className="login-brand"><img src={runtaIcon} alt="" /><h1 id="login-title">Errand</h1></div>
+      <div className="login-brand"><img src={errandIcon} alt="" /><h1 id="login-title">Errand</h1></div>
       <p>Your cloud agents, ready to take on real work.</p>
       <button className="login-primary" disabled={status === "pending"} onClick={onSignIn}>
         {status === "pending" ? <><LoaderCircle className="spin" size={18} /> Waiting for authorization…</> : <>Sign in <ArrowRight size={18} /></>}

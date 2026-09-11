@@ -14,9 +14,9 @@
     "node": ">=22 <27"
   },
   "scripts": {
-    "dev": "node scripts/rebrand-electron.mjs && electron-vite dev",
+    "dev": "npm run build:icons && node scripts/rebrand-electron.mjs && electron-vite dev",
     "postinstall": "node scripts/ensure-electron.mjs",
-    "build": "electron-vite build",
+    "build": "npm run build:icons && electron-vite build",
     "package": "npm run build && electron-builder --mac --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false && node scripts/compress-dmg.mjs",
     "package:release": "node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p electron/tsconfig.json",
@@ -24,7 +24,8 @@
     "test": "vitest run",
     "test:e2e": "node scripts/e2e.mjs",
     "test:ui": "vitest run --project renderer",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "build:icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@novnc/novnc": "^1.5.0",
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@resvg/resvg-js": "2.6.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
@@ -54,8 +56,8 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "jsdom": "^26.1.0",
     "js-yaml": "4.3.1",
+    "jsdom": "^26.1.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.48.1",
     "vite": "^7.0.0",
@@ -74,7 +76,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "build/icon.png",
+      "icon": "build/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -100,6 +102,12 @@
           "errand",
           "runta-crew"
         ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "docs/licenses/boring-avatars.txt",
+        "to": "licenses/boring-avatars.txt"
       }
     ]
   }

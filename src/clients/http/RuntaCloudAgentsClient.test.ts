@@ -20,6 +20,11 @@ describe("RuntaCloudAgentsClient", () => {
     await expect(new RuntaCloudAgentsClient().listAgents()).rejects.toMatchObject({ code: "unauthorized", message: "Authentication is required" });
   });
 
+  it("uses neutral cloud availability copy for transport failures", async () => {
+    window.runtaCrew = { cloud: { request: async () => { throw new Error("fetch failed"); }, subscribe: () => () => undefined } } as unknown as DesktopBridge;
+    await expect(new RuntaCloudAgentsClient().listAgents()).rejects.toMatchObject({ code: "network", message: "Cloud agents are unavailable" });
+  });
+
   it("maps the current Cloud Agents envelope and uses the managed provider for creation", async () => {
     const request = vi.fn(async ({ method, path }: CloudRequest) => {
       if (path.startsWith("/v2/agents?")) return { status: 200, body: { agents: [{ id: "agent-1", runtime_id: "agent-1", name: "Builder", status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 2, latest_reply: { run_id: "run-1", text: "Latest agent reply", created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z" } }] } };

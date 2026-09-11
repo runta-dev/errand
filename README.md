@@ -107,6 +107,10 @@ To validate a feature branch before the release workflow reaches the default bra
 
 A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `errand-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
 
+## Brand assets
+
+The Errand [SVG icon](src/assets/errand-icon.svg) uses the same `beam` variant of [boring-avatars](https://github.com/boringdesigners/boring-avatars) as the agents in the app. The Dock icon uses the selected Atlas seed with the app's original palette, configured in `src/shared/avatarStyle.json`; the generated avatar artwork is unchanged apart from the macOS icon mask and padding. `npm run build:icons` generates the SVG, PNG, and macOS ICNS files; development and release builds run it automatically. The app, Dock, and installer use the same artwork. The library's MIT notice is included in the packaged app.
+
 ## Upgrade compatibility
 
 Quit Runta Crew before opening Errand for the first time. Errand keeps the existing `com.runta.crew` application identity and `Runta Crew` local profile and keychain namespace so upgrades retain settings, credentials, and browser data. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.

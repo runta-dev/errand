@@ -61,7 +61,7 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, creat
       </div>}
       {signedIn
         ? <button className="account-trigger" aria-label={userName} aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((value) => !value)}><span className="account-avatar">{userName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span>{userName}</span></button>
-        : <button className="account-trigger" onClick={onSignIn}><span className="account-avatar"><LogIn size={15} /></span><span>Sign in to Runta</span></button>}
+        : <button className="account-trigger" onClick={onSignIn}><span className="account-avatar"><LogIn size={15} /></span><span>Sign in to Errand</span></button>}
     </div>
   </aside>;
 }

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 if (process.platform === "darwin") {
@@ -31,6 +31,9 @@ if (process.platform === "darwin") {
   }
   execFileSync("plutil", ["-replace", "CFBundleExecutable", "-string", appName, plist]);
   execFileSync("plutil", ["-replace", "CFBundleIdentifier", "-string", `${metadata.build.appId}.dev`, plist]);
+  const iconName = `${appName}.icns`;
+  copyFileSync(join(process.cwd(), "build/icon.icns"), join(bundle, "Contents/Resources", iconName));
+  execFileSync("plutil", ["-replace", "CFBundleIconFile", "-string", iconName, plist]);
 
   const localization = join(bundle, "Contents/Resources/en.lproj");
   mkdirSync(localization, { recursive: true });

@@ -15,7 +15,7 @@ export function DeleteAgentDialog({ agent, onClose, onDelete }: { agent: Agent; 
   function remove() { onClose(); void onDelete().catch(() => undefined); }
   return <DialogShell title={`Delete ${agent.name}?`} onClose={onClose}><div className="delete-agent-copy"><p>This permanently removes the cloud agent and its runtime data.</p><strong>This action cannot be undone.</strong></div><div className="dialog-actions delete-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button destructive-button" onClick={remove}>Delete agent</button></div></DialogShell>;
 }
-export function SettingsDialog({ mode = "preferences", providers = [], organizationId = "", accountName = "Runta account", accountEmail = "", onModelProviderOpen, onLogout, onClose }: { mode?: "connection" | "preferences"; providers?: ModelProviderOption[]; organizationId?: string; accountName?: string; accountEmail?: string; onModelProviderOpen?(): void; onLogout?(): void; onClose(): void }) {
+export function SettingsDialog({ mode = "preferences", providers = [], organizationId = "", accountName = "Your account", accountEmail = "", onModelProviderOpen, onLogout, onClose }: { mode?: "connection" | "preferences"; providers?: ModelProviderOption[]; organizationId?: string; accountName?: string; accountEmail?: string; onModelProviderOpen?(): void; onLogout?(): void; onClose(): void }) {
   const [settings, setSettings] = useState<AppSettings>({ endpoint: DEFAULT_RUNTA_API_URL, dashboardUrl: DEFAULT_RUNTA_DASHBOARD_URL, theme: "light", notifications: true });
   useEffect(() => { void window.runtaCrew?.settings.get().then(setSettings); }, []);
   async function save(event: FormEvent) {

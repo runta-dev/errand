@@ -140,7 +140,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     catch (reason) {
       const message = reason instanceof Error ? reason.message : "";
       if (/token is not configured/i.test(message)) throw new CrewError("unauthorized", "Authentication is required");
-      throw new CrewError("network", "Runta Cloud Agents is unavailable", true);
+      throw new CrewError("network", "Cloud agents are unavailable", true);
     }
     if (response.status === 401) throw new CrewError("unauthorized", "Authentication is required");
     if (response.status === 404) throw new CrewError("not_found", "Resource not found");

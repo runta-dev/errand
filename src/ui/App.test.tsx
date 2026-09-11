@@ -17,6 +17,7 @@ describe("Errand authentication surfaces", () => {
       settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
     } as unknown as DesktopBridge;
     render(<SettingsDialog organizationId="org-a/b" providers={[]} onClose={() => undefined} />);
+    expect(screen.getByText("Your account")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add model provider" }));
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(openExternal).toHaveBeenCalledWith("https://app.forge/org/org-a%2Fb/secrets/providers/new");
@@ -53,6 +54,8 @@ describe("Errand authentication surfaces", () => {
     expect(accountDisplayName({ email: "shiqi.mei@runta.com" })).toBe("Shiqi Mei");
     expect(accountDisplayName({ email: "xydd@runta.com" })).toBe("Xydd");
     expect(accountDisplayName({ display_name: "  Shiqi Mei  ", email: "ignored@runta.com" })).toBe("Shiqi Mei");
+    expect(accountDisplayName()).toBe("Your account");
+    expect(accountDisplayName({ email: ".@example.com" })).toBe("Your account");
   });
   it("keeps account actions in the username popover", async () => {
     const opened: string[] = [];
@@ -107,6 +110,11 @@ describe("Errand authentication surfaces", () => {
     expect(screen.getByText("No agents found")).toBeInTheDocument();
   });
 
+  it("uses Errand for the signed-out account action", () => {
+    render(<AgentList agents={[]} selectedId="" search="" signedIn={false} userName="" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
+    expect(screen.getByRole("button", { name: "Sign in to Errand" })).toBeInTheDocument();
+  });
+
   it("shows only Agent actions backed by the Cloud Agents API", async () => {
     const user = userEvent.setup(); const atlas = { id: "atlas", name: "Atlas", role: "Cloud coding agent", goal: "Atlas", status: "idle" as const, avatar: "A", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "atlas" };
     render(<AgentList agents={[atlas]} selectedId="atlas" search="" signedIn userName="Shiqi Mei" onSearch={() => undefined} onSelect={() => undefined} onAction={() => undefined} onCreate={() => undefined} onSettings={() => undefined} onSignIn={() => undefined} onLogout={() => undefined} />);
@@ -130,7 +138,7 @@ describe("Errand authentication surfaces", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Errand", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Runta account" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Your account" })).not.toBeInTheDocument();
     expect(cloudRequest).not.toHaveBeenCalled();
     delete window.runtaCrew;
   });
@@ -146,7 +154,7 @@ describe("Errand authentication surfaces", () => {
     window.runtaCrew = bridge;
     const user = userEvent.setup(); render(<App />);
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
-    expect(await screen.findByText("This Runta environment does not support Errand sign-in yet.")).toBeInTheDocument();
+    expect(await screen.findByText("This server does not support Errand sign-in yet.")).toBeInTheDocument();
     expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
     delete window.runtaCrew;
   });

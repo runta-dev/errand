@@ -155,11 +155,11 @@ ipcMain.handle("auth:logout", async () => {
   vncOriginGrants.clear();
   if (!existsSync(credentialFile()) || readFileSync(credentialFile()).length === 0) { authorizationStatus = "idle"; return true; }
   if (!safeStorage.isEncryptionAvailable()) throw new Error("OS credential encryption is unavailable");
-  if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
+  if (!settings.endpoint) throw new Error("API endpoint is not configured");
   const token = safeStorage.decryptString(readFileSync(credentialFile()));
   const apiBase = `${settings.endpoint.replace(/\/+$/, "")}/`;
   const response = await net.fetch(new URL("v2/auth/token", apiBase).toString(), { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
-  if (!response.ok && response.status !== 401) throw new Error(`Runta key revocation failed (${response.status})`);
+  if (!response.ok && response.status !== 401) throw new Error(`Sign-out failed (${response.status})`);
   vncOriginGrants.clear();
   if (existsSync(credentialFile())) rmSync(credentialFile());
   authorizationStatus = "idle";
@@ -210,10 +210,10 @@ ipcMain.handle("auth:start", async () => {
   return { verificationUrl: envelope.data.verification_uri_complete, userCode: envelope.data.user_code, expiresAt: envelope.data.expires_at };
 });
 ipcMain.handle("cloud:request", async (event, request: CloudRequest) => {
-  if (!settings.endpoint) throw new Error("Runta API endpoint is not configured");
-  if (!existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("Runta API token is not configured");
+  if (!settings.endpoint) throw new Error("API endpoint is not configured");
+  if (!existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("API token is not configured");
   const encrypted = readFileSync(credentialFile());
-  if (!encrypted.length) throw new Error("Runta API token is not configured");
+  if (!encrypted.length) throw new Error("API token is not configured");
   const token = safeStorage.decryptString(encrypted);
   const endpoint = new URL(`${settings.endpoint.replace(/\/+$/, "")}/`);
   const url = new URL(request.path.replace(/^\/+/, ""), endpoint);
@@ -257,7 +257,7 @@ ipcMain.on("cloud:stream:subscribe", (event, value: { subscriptionId?: unknown; 
   const send = (streamEvent: CloudStreamEvent) => { if (!event.sender.isDestroyed()) event.sender.send("cloud:stream:event", { subscriptionId, ...streamEvent }); };
   void (async () => {
     try {
-      if (!settings.endpoint || !existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("Runta API token is not configured");
+      if (!settings.endpoint || !existsSync(credentialFile()) || !safeStorage.isEncryptionAvailable()) throw new Error("API token is not configured");
       const endpoint = new URL(`${settings.endpoint.replace(/\/+$/, "")}/`); const url = new URL(path.replace(/^\/+/, ""), endpoint);
       const token = safeStorage.decryptString(readFileSync(credentialFile()));
       const response = await net.fetch(url.toString(), { headers: { authorization: `Bearer ${token}`, accept: "text/event-stream" }, signal: controller.signal });

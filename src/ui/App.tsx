@@ -11,6 +11,7 @@ import { LoginPage } from "./components/LoginPage";
 import { AgentAvatar } from "./components/AgentAvatar";
 import { accountDisplayName } from "./accountDisplayName";
 import { nextAgentName } from "@/domain/agentName";
+import errandIcon from "@/assets/errand-icon.svg";
 import type { Agent } from "@/domain/types";
 
 const LANDING_AGENTS = ["Atlas", "Scout", "Mira", "Nova"] as const;
@@ -52,8 +53,8 @@ export function App() {
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
-    if (/Device authorization failed \(401\)/.test(raw)) return "This Runta environment does not support Errand sign-in yet.";
-    if (/Device authorization failed \(502|fetch failed/i.test(raw)) return "Runta Cloud Agents is unavailable. Try again shortly.";
+    if (/Device authorization failed \(401\)/.test(raw)) return "This server does not support Errand sign-in yet.";
+    if (/Device authorization failed \(502|fetch failed/i.test(raw)) return "Cloud agents are unavailable. Try again shortly.";
     return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/, "") || "Authorization failed. Try again.";
   }
   async function connectAuthenticatedAccount() {
@@ -62,8 +63,8 @@ export function App() {
       window.runtaCrew?.cloud?.request({ method: "GET", path: "/v2/me" }).catch(() => undefined),
       new Promise<undefined>((resolve) => { timeout = window.setTimeout(() => resolve(undefined), 5_000); }),
     ]).finally(() => { if (timeout !== undefined) window.clearTimeout(timeout); });
-    if (!response) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError("Runta session validation did not return a response."); return false; }
-    if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError(`Runta session validation failed (${response.status}).`); return false; }
+    if (!response) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError("Could not verify your session. Try again."); return false; }
+    if (response.status !== 200) { setSignedIn(false); setUserName(""); setAuthReady(true); setAuthError(`Session verification failed (${response.status}).`); return false; }
     const profile = response.body as { data?: { display_name?: string | null; email?: string } } | undefined;
     setUserName(accountDisplayName(profile?.data));
     setUserEmail(profile?.data?.email ?? "");
@@ -88,7 +89,7 @@ export function App() {
             if (await window.runtaCrew?.credentials.has()) { credentialReady = true; break; }
             await new Promise((resolve) => window.setTimeout(resolve, 50));
           }
-          if (!credentialReady) throw new Error("Runta authorization completed before the local session was ready. Try again.");
+          if (!credentialReady) throw new Error("Sign-in completed before your session was ready. Try again.");
           await connectAuthenticatedAccount();
           return;
         }
@@ -103,7 +104,7 @@ export function App() {
       await window.runtaCrew?.auth?.logout();
       setClient(new RuntaCloudAgentsClient()); setSignedIn(false); setAuthReady(true); setUserName(""); setUserEmail("");
     } catch (reason) {
-      setAuthError(reason instanceof Error ? reason.message : "Could not revoke the Runta key. Try again.");
+      setAuthError(reason instanceof Error ? reason.message : "Could not sign out. Try again.");
     }
   }
   useEffect(() => {
@@ -176,7 +177,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  if (forceLoading || !authReady || crew.loading) return <div className="loading-screen"><div className="loading-avatar" aria-hidden="true"><AgentAvatar agent={{ id: "runta-crew-loading", name: "Errand" }} size={56} /></div><span className="loading-copy" data-text="Getting your agents ready…">Getting your agents ready…</span></div>;
+  if (forceLoading || !authReady || crew.loading) return <div className="loading-screen"><div className="loading-avatar" aria-hidden="true"><img className="agent-avatar" src={errandIcon} alt="" width={56} height={56} /></div><span className="loading-copy" data-text="Getting your agents ready…">Getting your agents ready…</span></div>;
   if (!signedIn) return <><LoginPage status={authPending ? "pending" : "idle"} error={authError} allowConnectionSettings={import.meta.env.DEV} onSignIn={() => void signIn()} onSettings={() => setSettingsOpen(true)} />{import.meta.env.DEV && settingsOpen && <SettingsDialog mode="connection" onClose={() => setSettingsOpen(false)} />}</>;
   return <div className={`app-shell ${detailsOpen ? "details-open" : ""}`} style={{ "--detail-panel-width": `${detailPanelWidth}px` } as CSSProperties}>
     <AgentList agents={agents} selectedId={crew.selectedAgentId} search={search} creatingAgentName={creatingAgentName} creatingAgentPhase={creatingAgentPhase} creatingAgentBaselineIds={creatingAgentBaselineIds} signedIn={signedIn} userName={userName} onSearch={setSearch} onSelect={crew.setSelectedAgentId} onAction={handleAgentAction} onCreate={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onSignIn={() => setSettingsOpen(true)} onLogout={() => void logout()} />
