@@ -1,26 +1,26 @@
 <div align="center">
 
-# Runta Crew
+# Errand
 
 ### Your cloud agents, ready to take on real work.
 
-Create a crew. Give them a job. Come back to finished work.
+Build your AI team. Give them a job. Come back to finished work.
 
 [Runta](https://runta.com) · macOS · Powered by Runta Cloud Agents
 
 </div>
 
-![Runta Crew](./docs/screenshots/main-window.gif)
+![Errand](./docs/screenshots/errand-login.png)
 
 ## Your AI team has a computer now
 
-Runta Crew is a desktop home for persistent cloud agents. Each teammate runs inside its own Runta Runtime, keeps its workspace, and continues working after you close the app.
+Errand is a desktop home for persistent cloud agents. Each teammate runs inside its own Runta Runtime, keeps its workspace, and continues working after you close the app.
 
-No tab jungle. No babysitting terminal sessions. Just message your crew and let them work.
+No tab jungle. No babysitting terminal sessions. Just message your agents and let them work.
 
 ## Built for delegation
 
-- **A crew that sticks around** — create focused agents with persistent cloud workspaces.
+- **Agents that stick around** — create focused agents with persistent cloud workspaces.
 - **Real work, not chat theater** — follow live activity, tool use, approvals, and results.
 - **Pick up where you left off** — conversations and completed runs stay with each agent.
 - **Cloud-native by default** — the desktop app connects directly to Runta Cloud Agents.
@@ -43,9 +43,9 @@ The app defaults to:
 - Cloud Agents API: `https://api.runta.me`
 - Runta Dashboard: `https://dashboard.runta.me`
 
-Development builds can override these addresses in Connection settings. The E2E script accepts a `RUNTA_CREW_E2E_ENDPOINT` override.
+Development builds can override these addresses in Connection settings. The E2E script accepts a `ERRAND_E2E_ENDPOINT` override.
 
-Runta Crew uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
+Errand uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
 
 ## Ship with confidence
 
@@ -59,7 +59,7 @@ npm run build
 For the authenticated end-to-end flow:
 
 ```bash
-RUNTA_CREW_E2E_TOKEN=... npm run test:e2e
+ERRAND_E2E_TOKEN=... npm run test:e2e
 ```
 
 Package and smoke-test the macOS app:
@@ -71,7 +71,7 @@ npm run smoke
 
 Artifacts are written to `release/`. `npm run package` creates ad-hoc signed builds for local testing; these are not public distribution artifacts.
 
-Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Runta Crew requires macOS 13 or later. The DMG compression step leaves ZIP artifacts unchanged.
+Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Errand requires macOS 13 or later. The DMG compression step leaves ZIP artifacts unchanged.
 
 ## Signed macOS releases
 
@@ -105,8 +105,12 @@ Once the workflow is on the repository's default branch, **Actions → Publish m
 
 To validate a feature branch before the release workflow reaches the default branch, dispatch the existing **CI** workflow on that branch with `signed_release=true` and `release_tag` matching `package.json`. This entry reuses the release workflow in dry-run mode, including signing, notarization, and artifact verification.
 
-A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `runta-crew-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
+A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `errand-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
+
+## Upgrade compatibility
+
+Quit Runta Crew before opening Errand for the first time. Errand keeps the existing `com.runta.crew` application identity and `Runta Crew` local profile and keychain namespace so upgrades retain settings, credentials, and browser data. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.
 
 ## Under the hood
 
-Runta Crew keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.
+Errand keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.

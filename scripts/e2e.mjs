@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 
-const endpoint = (process.env.RUNTA_CREW_E2E_ENDPOINT || "https://api.runta.me").replace(/\/+$/, "");
-const token = process.env.RUNTA_CREW_E2E_TOKEN;
-if (!token) throw new Error("RUNTA_CREW_E2E_TOKEN is required");
+const endpoint = (process.env.ERRAND_E2E_ENDPOINT || process.env.RUNTA_CREW_E2E_ENDPOINT || "https://api.runta.me").replace(/\/+$/, "");
+const token = process.env.ERRAND_E2E_TOKEN || process.env.RUNTA_CREW_E2E_TOKEN;
+if (!token) throw new Error("ERRAND_E2E_TOKEN is required");
 
 async function request(path, init = {}) {
   const response = await fetch(`${endpoint}${path}`, {
@@ -27,13 +27,13 @@ let agent;
 try {
   agent = await request("/v2/agents", {
     method: "POST",
-    body: JSON.stringify({ name: `runta-crew-e2e-${suffix}`, model_provider: { type: "managed", id: provider.id } }),
+    body: JSON.stringify({ name: `errand-e2e-${suffix}`, model_provider: { type: "managed", id: provider.id } }),
   });
   assert.equal(typeof agent.id, "string");
 
   const run = await request(`/v2/agents/${encodeURIComponent(agent.id)}/runs`, {
     method: "POST",
-    body: JSON.stringify({ prompt: "Reply with RUNTA_CREW_E2E_OK." }),
+    body: JSON.stringify({ prompt: "Reply with ERRAND_E2E_OK." }),
   });
   assert.equal(typeof run.id, "string");
 
@@ -45,8 +45,8 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
   assert.equal(completed?.status, "finished", `run did not finish: ${completed?.status ?? "timeout"}`);
-  assert.match(completed.result || "", /RUNTA_CREW_E2E_OK/);
-  console.log(`Runta Crew E2E passed for agent ${agent.id}`);
+  assert.match(completed.result || "", /ERRAND_E2E_OK/);
+  console.log(`Errand E2E passed for agent ${agent.id}`);
 } finally {
   if (agent?.id) await request(`/v2/agents/${encodeURIComponent(agent.id)}?delete_runtime=true`, { method: "DELETE" });
 }

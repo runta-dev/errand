@@ -30,7 +30,7 @@ describe("VncOriginGrants", () => {
 
   it("handles case-insensitive headers and the packaged file Origin", () => {
     const grants = new VncOriginGrants();
-    const packaged = { ...context, rendererUrl: "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
+    const packaged = { ...context, rendererUrl: "file:///Applications/Errand.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
     grants.remember(response, packaged, grants.revision, nonce, now);
     expect(grants.headersFor(request, packaged, now)).toBeUndefined();
     expect(grants.headersFor({ ...request, requestHeaders: { origin: "null" } }, packaged, now)).toBeUndefined();
@@ -105,7 +105,7 @@ describe("VncOriginGrants", () => {
   });
 
   it("authorizes only the exact expected packaged or development document and its native origin", () => {
-    const file = "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html";
+    const file = "file:///Applications/Errand.app/Contents/Resources/app.asar/out/renderer/index.html";
     expect(isTrustedVncRenderer(file, "file://", file)).toBe(true);
     expect(isTrustedVncRenderer(file, "null", file)).toBe(false);
     expect(isTrustedVncRenderer("file:///tmp/untrusted.html", "file://", file)).toBe(false);
@@ -130,7 +130,7 @@ describe("VncOriginGrants", () => {
 
   it("keeps fresh packaged nonce grants isolated from other requests and previous grants", () => {
     const grants = new VncOriginGrants();
-    const packaged = { ...context, rendererUrl: "file:///Applications/Runta%20Crew.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
+    const packaged = { ...context, rendererUrl: "file:///Applications/Errand.app/Contents/Resources/app.asar/out/renderer/index.html", rendererOrigin: "file://" };
     const fileRequest = { ...request, requestHeaders: { Origin: "file://" } };
     const nextNonce = "565f98c4-4a95-42cf-ad76-249d7c19a540";
     grants.remember(response, packaged, grants.revision, nonce, now);

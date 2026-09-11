@@ -26,7 +26,7 @@ export function AgentList({ agents, selectedId, search, creatingAgentName, creat
     : agents;
   return <aside className="agent-sidebar">
     <div className="sidebar-titlebar"><button className="brand-add" aria-label="New agent" disabled={Boolean(creatingAgentName)} onClick={onCreate}><Plus size={18} /></button></div>
-    <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your crew" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
+    <label className="search"><Search size={15} /><input aria-label="Search agents" placeholder="Search your agents" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
     <div className="agent-list">
       {creatingAgentName && <div className={`agent-row agent-creating ${creatingAgentPhase === "typing" ? "is-typing" : "is-creating"}`} role="status" aria-live="polite" aria-label={`${creatingAgentName} ${creatingAgentPhase === "typing" ? "is typing" : "is being created"}`}>
         <div className="agent-select">

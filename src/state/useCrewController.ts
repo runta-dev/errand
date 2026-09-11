@@ -204,7 +204,7 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
             if (completedPreview) setAgents((agents) => agents.map((agent) => agent.id === selectedAgentId ? { ...agent, lastMessagePreview: completedPreview } : agent));
             return completed;
           });
-          void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Runta Crew." });
+          void window.runtaCrew?.notifications.show({ title: `${selectedAgent?.name ?? "Agent"} finished`, body: "New work is ready to review in Errand." });
         }
       }
       if (event.type === "message.updated") {

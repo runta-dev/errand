@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, safeStorage, shell } from "electron";
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -7,6 +7,7 @@ import type { AppSettings, CloudRequest, CloudStreamEvent, DeviceAuthorizationSt
 import { DEFAULT_RUNTA_API_URL, DEFAULT_RUNTA_DASHBOARD_URL, deviceAuthorizationRequest, deviceAuthorizationUrl, deviceTokenRequest, deviceTokenUrl, normalizeRuntaApiUrl, normalizeRuntaDashboardUrl } from "../../src/shared/runtaEndpoints";
 import { cloudRunEventsPath } from "../../src/shared/cloudStreamPath";
 import { isTrustedVncRenderer, VncOriginGrants, type VncOriginContext } from "./vncOrigin";
+import { AGENT_LINK_SCHEMES, APP_DISPLAY_NAME, STORAGE_APPLICATION_NAME, agentIdFromDeepLink, nativeEnvironmentValue, storageDirectory } from "./appBranding";
 
 const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(devServerUrl);
@@ -30,11 +31,12 @@ function vncOriginContext(): VncOriginContext | undefined {
   return { endpoint: settings.endpoint, dashboardUrl: settings.dashboardUrl, rendererUrl: frame.url, rendererOrigin: frame.origin, webContentsId: mainWindow.webContents.id };
 }
 
-app.setName("Runta Crew");
+app.setName(STORAGE_APPLICATION_NAME);
+const profileDirectory = storageDirectory(app.getPath("appData"), app.commandLine.getSwitchValue("user-data-dir"));
+mkdirSync(profileDirectory, { recursive: true, mode: 0o700 });
+app.setPath("userData", profileDirectory);
+app.setPath("sessionData", profileDirectory);
 
-function agentIdFromDeepLink(value: string): string | undefined {
-  try { const url = new URL(value); const id = url.protocol === "runta-crew:" && url.hostname === "agent" ? decodeURIComponent(url.pathname.replace(/^\//, "")) : ""; return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id) ? id : undefined; } catch { return undefined; }
-}
 function openAgentDeepLink(value: string) {
   const agentId = agentIdFromDeepLink(value); if (!agentId) return;
   pendingDeepLinkAgentId = agentId;
@@ -58,12 +60,12 @@ function loadSettings(): AppSettings {
 }
 
 function createWindow() {
-  const requestedSize = process.env.RUNTA_CREW_WINDOW_SIZE?.match(/^(\d+)x(\d+)$/);
+  const requestedSize = nativeEnvironmentValue(process.env, "WINDOW_SIZE")?.match(/^(\d+)x(\d+)$/);
   const width = requestedSize ? Math.max(960, Number(requestedSize[1])) : 1040;
   const height = requestedSize ? Math.max(640, Number(requestedSize[2])) : 760;
   const window = new BrowserWindow({
     width, height, minWidth: 960, minHeight: 640,
-    title: "Runta Crew", backgroundColor: "#f7f6f3",
+    title: APP_DISPLAY_NAME, backgroundColor: "#f7f6f3",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 18, y: 18 },
     webPreferences: {
@@ -89,14 +91,14 @@ function createWindow() {
   });
   window.webContents.once("did-finish-load", () => {
     if (pendingDeepLinkAgentId) { window.webContents.send("deep-link:agent", pendingDeepLinkAgentId); pendingDeepLinkAgentId = undefined; }
-    const smokeMarker = process.env.RUNTA_CREW_SMOKE_MARKER;
+    const smokeMarker = nativeEnvironmentValue(process.env, "SMOKE_MARKER");
     if (smokeMarker) {
       const frame = window.webContents.mainFrame;
       const context = vncOriginContext();
-      writeFileSync(smokeMarker, JSON.stringify({ ready: true, rendererUrl: frame.url, rendererOrigin: frame.origin, vncOrigin: context?.rendererOrigin }));
+      writeFileSync(smokeMarker, JSON.stringify({ ready: true, windowTitle: window.getTitle(), rendererUrl: frame.url, rendererOrigin: frame.origin, vncOrigin: context?.rendererOrigin }));
       app.quit(); return;
     }
-    const screenshotPath = process.env.RUNTA_CREW_SCREENSHOT_PATH;
+    const screenshotPath = nativeEnvironmentValue(process.env, "SCREENSHOT_PATH");
     if (screenshotPath) globalThis.setTimeout(() => { void window.webContents.capturePage().then((image) => { writeFileSync(screenshotPath, image.toPNG()); app.quit(); }); }, 1200);
   });
 }
@@ -104,7 +106,7 @@ function createWindow() {
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 else {
-  app.on("second-instance", (_event, argv) => { const deepLink = argv.find((value) => value.startsWith("runta-crew://")); if (deepLink) openAgentDeepLink(deepLink); else { mainWindow?.show(); mainWindow?.focus(); } });
+  app.on("second-instance", (_event, argv) => { const deepLink = argv.find((value) => agentIdFromDeepLink(value) !== undefined); if (deepLink) openAgentDeepLink(deepLink); else { mainWindow?.show(); mainWindow?.focus(); } });
   app.on("open-url", (event, url) => { event.preventDefault(); openAgentDeepLink(url); });
 }
 
@@ -114,9 +116,10 @@ app.whenReady().then(() => {
     const dockIconPath = join(process.cwd(), "build/icon.png");
     if (existsSync(dockIconPath)) app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
   }
-  if (app.isPackaged) app.setAsDefaultProtocolClient("runta-crew");
+  if (app.isPackaged) for (const scheme of AGENT_LINK_SCHEMES) app.setAsDefaultProtocolClient(scheme);
+  app.setAboutPanelOptions({ applicationName: APP_DISPLAY_NAME, applicationVersion: app.getVersion() });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: "Runta Crew", submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }] },
+    { label: APP_DISPLAY_NAME, submenu: [{ role: "about", label: `About ${APP_DISPLAY_NAME}` }, { type: "separator" }, { role: "quit", label: `Quit ${APP_DISPLAY_NAME}` }] },
     { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
     { label: "View", submenu: [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }] },
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }] },
@@ -168,7 +171,7 @@ ipcMain.handle("auth:start", async () => {
   const response = await net.fetch(deviceAuthorizationUrl(apiBase), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(deviceAuthorizationRequest(`Runta Crew on ${process.platform}`, settings.dashboardUrl)),
+    body: JSON.stringify(deviceAuthorizationRequest(`${APP_DISPLAY_NAME} on ${process.platform}`, settings.dashboardUrl)),
   });
   if (!response.ok) throw new Error(`Device authorization failed (${response.status})`);
   const envelope = await response.json() as { data: { device_code: string; user_code: string; verification_uri_complete: string; expires_at: string; interval: number } };
@@ -287,7 +290,7 @@ ipcMain.handle("attachments:choose", async () => {
     const id = randomUUID(); selectedAttachments.set(id, { path });
     return [{ id, name: basename(path), size, mediaType: mediaTypeForPath(path) }];
   });
-  if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: "Runta Crew supports files up to 25 MB." });
+  if (attachments.length !== result.filePaths.length) await dialog.showMessageBox({ type: "warning", title: "Some files were not attached", message: `${APP_DISPLAY_NAME} supports files up to 25 MB.` });
   return attachments;
 });
 ipcMain.handle("attachments:addImage", (_event, value: { name?: unknown; mediaType?: unknown; base64?: unknown }) => {

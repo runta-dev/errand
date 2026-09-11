@@ -48,7 +48,7 @@ export function VncSurface({ session, viewOnly, compact = false, onReconnect, on
     const securityFailure = (event: Event) => {
       fail((event as CustomEvent<{ reason?: string }>).detail?.reason || "Cloud computer security negotiation failed.");
     };
-    const credentialsRequired = () => fail("Cloud computer requires VNC credentials that Runta Crew cannot provide.");
+    const credentialsRequired = () => fail("Cloud computer requires VNC credentials that Errand cannot provide.");
     connectionTimeout = window.setTimeout(() => fail("Cloud computer connection timed out."), 15_000);
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
       if (cancelled || failed || !target.current) return;

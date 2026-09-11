@@ -9,7 +9,7 @@ import { LoginPage } from "./components/LoginPage";
 import { SettingsDialog } from "./components/Dialogs";
 import type { AppSettings, DesktopBridge } from "@/shared/desktop";
 
-describe("Runta Crew authentication surfaces", () => {
+describe("Errand authentication surfaces", () => {
   it("opens the dashboard add-provider page when no providers exist", async () => {
     const openExternal = vi.fn(async () => undefined); const user = userEvent.setup();
     window.runtaCrew = {
@@ -98,9 +98,10 @@ describe("Runta Crew authentication surfaces", () => {
     expect(screen.queryByText("Creating…")).not.toBeInTheDocument();
   });
 
-  it("distinguishes an empty crew from an empty search result", () => {
+  it("distinguishes an empty agent list from an empty search result", () => {
     const props = { agents: [], selectedId: "", signedIn: true, userName: "Shiqi Mei", onSearch: () => undefined, onSelect: () => undefined, onAction: () => undefined, onCreate: () => undefined, onSettings: () => undefined, onSignIn: () => undefined, onLogout: () => undefined };
     const { rerender } = render(<AgentList {...props} search="" />);
+    expect(screen.getByPlaceholderText("Search your agents")).toBeInTheDocument();
     expect(screen.getByText("No agents yet")).toBeInTheDocument();
     rerender(<AgentList {...props} search="missing" />);
     expect(screen.getByText("No agents found")).toBeInTheDocument();
@@ -127,7 +128,7 @@ describe("Runta Crew authentication surfaces", () => {
     };
     window.runtaCrew = bridge;
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Runta Crew", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Errand", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Runta account" })).not.toBeInTheDocument();
     expect(cloudRequest).not.toHaveBeenCalled();
@@ -145,7 +146,7 @@ describe("Runta Crew authentication surfaces", () => {
     window.runtaCrew = bridge;
     const user = userEvent.setup(); render(<App />);
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
-    expect(await screen.findByText("This Runta environment does not support Crew sign-in yet.")).toBeInTheDocument();
+    expect(await screen.findByText("This Runta environment does not support Errand sign-in yet.")).toBeInTheDocument();
     expect(screen.queryByText(/Error invoking remote method/)).not.toBeInTheDocument();
     delete window.runtaCrew;
   });

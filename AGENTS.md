@@ -1,4 +1,4 @@
-# Runta Crew development rules
+# Errand development rules
 
 - Keep the Electron main process, typed preload bridge, domain model, transports, state orchestration, and renderer UI as separate layers.
 - Renderer code must not import Node.js or Electron. Keep `contextIsolation` and sandbox enabled, and `nodeIntegration` disabled.
@@ -9,5 +9,5 @@
 - Keep every UI change minimal: add only necessary controls or decoration, and justify every visible border.
 - Use strict TypeScript; do not add `any` escapes.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, and packaging/smoke checks for release-facing changes.
-- Use Conventional Commits. Runta Crew is currently in rapid iteration: commit and push directly to the active remote branch. A pull request is not required unless the user explicitly asks for one. Keep branch history linear and never introduce merge commits.
-- Runta Crew is temporarily not onboarded to Runta Review. Do not trigger, wait for, or treat Runta Review as a merge gate for this repository.
+- Use Conventional Commits. Errand is currently in rapid iteration: commit and push directly to the active remote branch. A pull request is not required unless the user explicitly asks for one. Keep branch history linear and never introduce merge commits.
+- Errand is temporarily not onboarded to Runta Review. Do not trigger, wait for, or treat Runta Review as a merge gate for this repository.

@@ -1,6 +1,6 @@
 {
-  "name": "runta-crew",
-  "version": "0.1.2",
+  "name": "errand",
+  "version": "0.2.0",
   "private": true,
   "repository": {
     "type": "git",
@@ -8,7 +8,7 @@
   },
   "type": "module",
   "main": "out/main/index.js",
-  "description": "Desktop client for Runta Cloud Agents",
+  "description": "Errand — a desktop home for persistent cloud agents",
   "author": "Runta",
   "engines": {
     "node": ">=22 <27"
@@ -63,7 +63,7 @@
   },
   "build": {
     "appId": "com.runta.crew",
-    "productName": "Runta Crew",
+    "productName": "Errand",
     "asar": true,
     "directories": {
       "output": "release"
@@ -92,6 +92,15 @@
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
-    }
+    },
+    "protocols": [
+      {
+        "name": "Errand agent links",
+        "schemes": [
+          "errand",
+          "runta-crew"
+        ]
+      }
+    ]
   }
 }

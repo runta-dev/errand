@@ -3,7 +3,7 @@ import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type A
 import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
-interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
+interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; stop_reason?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
 interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
 interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
 interface RuntaComputerSession { channels: { vnc: { websocket_url: string; protocols: string[] } } }
@@ -20,15 +20,17 @@ const AGENT_READY_TIMEOUT_MS = 30_000;
 const AGENT_READY_POLL_MS = 100;
 const LEGACY_INITIAL_MESSAGE = "Introduce yourself briefly to the user. Do not use tools or ask a question.";
 const LEGACY_IDENTITY_INITIAL_MESSAGE = "Introduce yourself briefly using only the Runta Crew identity and name from your system instructions. Do not mention any model, provider, Pi, harness, runtime, or implementation details. Do not use tools or ask a question.";
+// Keep the backend bootstrap identifier stable across the application rename.
 const INITIAL_MESSAGE_PREFIX = "[Runta Crew bootstrap] ";
-const initialMessage = (name: string) => `${INITIAL_MESSAGE_PREFIX}Reply with exactly these two short sentences: ${JSON.stringify(`Hi, I'm ${name}, your Runta Crew agent.`)} ${JSON.stringify("Tell me what you're working on and I'll jump in.")} Do not add anything else.`;
-const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Runta Crew agent. Complete tasks using the available files, terminal, browser, and computer tools; verify results before reporting them. Be concise, practical, and honest. Do not use emoji unless asked. Do not proactively mention underlying models or implementation details.`;
+const ERRAND_BOOTSTRAP_PREFIX = `${INITIAL_MESSAGE_PREFIX}[Errand] `;
+const initialMessage = (name: string) => `${ERRAND_BOOTSTRAP_PREFIX}${JSON.stringify(name)}\nReply with exactly these two short sentences: ${JSON.stringify(`Hi, I'm ${name}, your Errand agent.`)} ${JSON.stringify("Tell me what you're working on and I'll jump in.")} Do not add anything else.`;
+const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Errand agent. Complete tasks using the available files, terminal, browser, and computer tools; verify results before reporting them. Be concise, practical, and honest. Do not use emoji unless asked. Do not proactively mention underlying models or implementation details.`;
 const crewGreeting = (agentId: string, name: string) => {
   let hash = 0x811c9dc5;
   for (const byte of new TextEncoder().encode(agentId)) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
   const openings = [
-    `Hi, I'm ${name}, your Runta Crew agent.`, `Hello, I'm ${name}, ready to help.`, `${name} here, ready when you are.`, `Hi, I'm ${name} from your Runta Crew.`, `Hello, ${name} here and ready to go.`,
-    `I'm ${name}, your Crew agent.`, `Hi there, I'm ${name}.`, `${name} here, ready to get started.`, `Hello, I'm ${name}, and I'm all set.`, `Hi, I'm ${name}, here to help.`,
+    `Hi, I'm ${name}, your Errand agent.`, `Hello, I'm ${name}, ready to help.`, `${name} here, ready when you are.`, `Hi, I'm ${name} from Errand.`, `Hello, ${name} here and ready to go.`,
+    `I'm ${name}, your Errand agent.`, `Hi there, I'm ${name}.`, `${name} here, ready to get started.`, `Hello, I'm ${name}, and I'm all set.`, `Hi, I'm ${name}, here to help.`,
   ];
   const invitations = [
     "Tell me what you're working on and I'll jump in.", "What should we work on first?", "Tell me what you'd like to get done.", "Point me at a task and I'll get started.", "What can I help you tackle?",
@@ -37,6 +39,13 @@ const crewGreeting = (agentId: string, name: string) => {
   const variant = hash % 100;
   return `${openings[Math.floor(variant / 10)]}\n${invitations[variant % 10]}`;
 };
+function errandBootstrapName(run: RuntaRun): string | undefined {
+  if (run.status !== "finished" || run.stop_reason !== "synthetic" || run.error || !run.prompt?.startsWith(ERRAND_BOOTSTRAP_PREFIX)) return;
+  try {
+    const name: unknown = JSON.parse(run.prompt.slice(ERRAND_BOOTSTRAP_PREFIX.length).split("\n", 1)[0]);
+    return typeof name === "string" && name && initialMessage(name) === run.prompt ? name : undefined;
+  } catch { return; }
+}
 const isInitialMessage = (prompt: string | null | undefined) => prompt === LEGACY_INITIAL_MESSAGE || prompt === LEGACY_IDENTITY_INITIAL_MESSAGE || prompt?.startsWith(INITIAL_MESSAGE_PREFIX) === true;
 const visiblePrompt = (prompt: string | null | undefined) => {
   if (!prompt) return "";
@@ -66,12 +75,14 @@ function runMessages(run: RuntaRun, id: string, replyError?: string): Message[] 
   const createdAt = run.created_at ?? new Date().toISOString();
   const updatedAt = run.updated_at ?? createdAt;
   const prompt = visiblePrompt(run.prompt); const user = prompt && !isInitialMessage(run.prompt) ? [{ id: `${run.id}:user`, conversationId: id, role: "user" as const, parts: [{ type: "text" as const, text: prompt }], createdAt }] : [];
+  const bootstrapName = errandBootstrapName(run);
+  const result = bootstrapName ? crewGreeting(agentIdFromConversation(id), bootstrapName) : run.result;
   const terminalError = terminalRunStatuses.has(run.status) && run.status !== "cancelled" ? replyError : undefined;
-  if (terminalError || run.status === "failed" || run.status === "cancelled" || (run.status === "finished" && !run.result?.trim())) {
+  if (terminalError || run.status === "failed" || run.status === "cancelled" || (run.status === "finished" && !result?.trim())) {
     const detail = run.error?.trim() || terminalError || (run.status === "cancelled" ? "Run cancelled." : run.status === "finished" ? "The Agent finished without returning a reply." : "Run failed.");
     return [...user, { id: `${run.id}:agent`, conversationId: id, role: "system", parts: [{ type: "text", text: detail }], createdAt: updatedAt }];
   }
-  return [...user, { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: run.result ?? "" }], createdAt: updatedAt, streaming: !terminalRunStatuses.has(run.status) }];
+  return [...user, { id: `${run.id}:agent`, conversationId: id, role: "agent", parts: [{ type: "text", text: result ?? "" }], createdAt: updatedAt, streaming: !terminalRunStatuses.has(run.status) }];
 }
 
 function assistantError(event: CloudStreamEvent): string | undefined {
@@ -120,9 +131,10 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper
 
 export class RuntaCloudAgentsClient implements CloudAgentsClient {
   private readonly conversationRefreshListeners = new Map<string, Set<() => void>>();
+  private readonly bootstrapReplyPreviews = new Map<string, string>();
   private async request<T>(request: CloudRequest): Promise<T> {
     const bridge = window.runtaCrew?.cloud;
-    if (!bridge) throw new CrewError("network", "Runta desktop cloud bridge is unavailable", true);
+    if (!bridge) throw new CrewError("network", "Errand desktop cloud bridge is unavailable", true);
     let response;
     try { response = await bridge.request(request); }
     catch (reason) {
@@ -138,7 +150,9 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   }
 
   private mapAgent(value: RuntaAgent): Agent {
-    return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: value.latest_reply?.updated_at ?? iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id, lastMessagePreview: value.latest_reply?.text };
+    const reply = value.latest_reply;
+    const preview = reply ? this.bootstrapReplyPreviews.get(`${value.id}:${reply.run_id}`) ?? reply.text : undefined;
+    return { id: value.id, name: value.name, role: "Cloud coding agent", goal: value.name, status: status(value.status), avatar: value.name.slice(0, 1).toUpperCase(), lastActiveAt: value.latest_reply?.updated_at ?? iso(value.updated_at_unix_seconds), unreadCount: 0, computerId: value.runtime_id, lastMessagePreview: preview };
   }
 
   async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderCatalog> {
@@ -154,7 +168,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   }
   async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}` })); }
   async createAgent(input: CreateAgentInput, _signal?: AbortSignal) {
-    if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating a Crew agent");
+    if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating an Errand agent");
     const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, system_prompt: crewSystemPrompt(input.name), initial_message: initialMessage(input.name), model_provider: { type: "managed", id: input.modelProviderId } } });
     const ready = await this.waitForAgentRunning(created.id, _signal);
     return this.mapAgent(ready);
@@ -223,7 +237,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
     }
   }
   private replayRunMessages(agentId: string, run: RuntaRun, id: string, signal?: AbortSignal): Promise<Message[]> {
-    const fallback = runMessages(run, id);
+    let fallback = runMessages(run, id);
     const bridge = window.runtaCrew?.cloud;
     if (!bridge?.subscribe || !terminalRunStatuses.has(run.status) || signal?.aborted) return Promise.resolve(fallback);
     return new Promise((resolve) => {
@@ -254,6 +268,15 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       unsubscribe = bridge.subscribe(`/v2/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(run.id)}/events?after=-1`, (event) => {
         if (settled) return;
         if (event.event === "stream.closed" || event.event === "error") { finish(event.event === "error"); return; }
+        if (event.event === "run.status" && event.data && typeof event.data === "object") {
+          const snapshot = event.data as Partial<RuntaRun>;
+          if (snapshot.id === run.id && snapshot.status === "finished" && snapshot.stop_reason === "synthetic") {
+            const syntheticRun = { ...run, stop_reason: "synthetic" };
+            const name = errandBootstrapName(syntheticRun);
+            if (name) this.bootstrapReplyPreviews.set(`${agentId}:${run.id}`, crewGreeting(agentId, name));
+            fallback = runMessages(syntheticRun, id);
+          }
+        }
         const failure = assistantError(event);
         if (failure) { replyError = failure; current = undefined; }
         else if (assistantSucceeded(event)) replyError = undefined;

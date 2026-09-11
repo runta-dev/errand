@@ -72,7 +72,9 @@ export async function packageRelease() {
   const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const metadata = JSON.parse(await readFile(path.join(project, "package.json"), "utf8"));
   const output = path.join(project, "release");
-  const staging = await mkdtemp(path.join(tmpdir(), "runta-crew-signing-"));
+  const productName = metadata.build.productName;
+  const appBundle = `${productName}.app`;
+  const staging = await mkdtemp(path.join(tmpdir(), "errand-signing-"));
   const keychain = path.join(staging, "signing.keychain-db");
   const certificate = path.join(staging, "developer-id.p12");
   const notaryKey = path.join(staging, "AuthKey.p8");
@@ -142,9 +144,9 @@ export async function packageRelease() {
         mac: { identity, type: "distribution", hardenedRuntime: true, strictVerify: true, entitlements: "build/entitlements.mac.plist", entitlementsInherit: "build/entitlements.mac.plist", notarize: false },
         dmg: { sign: false },
         afterSign: async ({ appOutDir }) => {
-          const app = path.join(appOutDir, "Runta Crew.app");
+          const app = path.join(appOutDir, appBundle);
           await verifySignature(app, true);
-          const archive = path.join(staging, "Runta Crew.zip");
+          const archive = path.join(staging, `${productName}.zip`);
           await run("ditto", ["-c", "-k", "--keepParent", app, archive]);
           await notarize(archive);
           await staple(app);
@@ -166,7 +168,7 @@ export async function packageRelease() {
         verifyGatekeeperAssessment(assessment.stdout + assessment.stderr);
         const mount = path.join(staging, "dmg-mount");
         await run("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, file]);
-        try { await verifyApp(path.join(mount, "Runta Crew.app")); }
+        try { await verifyApp(path.join(mount, appBundle)); }
         finally {
           try { await run("hdiutil", ["detach", mount]); }
           catch { await delay(1_000); await run("hdiutil", ["detach", mount]); }
@@ -175,10 +177,10 @@ export async function packageRelease() {
     });
     // Check the ZIP's embedded app too: a valid expanded build alone does not
     // prove that either downloadable container carries the stapled signature.
-    const zip = path.join(output, `Runta Crew-${metadata.version}-arm64-mac.zip`);
+    const zip = path.join(output, `${productName}-${metadata.version}-arm64-mac.zip`);
     const extracted = path.join(staging, "zip-check");
     await run("ditto", ["-x", "-k", zip, extracted]);
-    await verifyApp(path.join(extracted, "Runta Crew.app"));
+    await verifyApp(path.join(extracted, appBundle));
     console.log("Release verified: Developer ID signatures, Apple tickets, DMG and ZIP contents.");
   } finally {
     try { if (originalKeychains) await run("security", ["list-keychains", "-d", "user", "-s", ...originalKeychains]); }

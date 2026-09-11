@@ -44,8 +44,8 @@ describe("distributed app signature verification", () => {
   });
 
   it("does not mistake disabled local Gatekeeper for a successful release assessment", () => {
-    expect(() => verifyGatekeeperAssessment("Runta Crew.app: accepted\nsource=Notarized Developer ID\n")).not.toThrow();
-    expect(() => verifyGatekeeperAssessment("Runta Crew.app: accepted\noverride=security disabled\n")).toThrow();
-    expect(() => verifyGatekeeperAssessment("Runta Crew.app: accepted\nsource=Developer ID\n")).toThrow();
+    expect(() => verifyGatekeeperAssessment("Errand.app: accepted\nsource=Notarized Developer ID\n")).not.toThrow();
+    expect(() => verifyGatekeeperAssessment("Errand.app: accepted\noverride=security disabled\n")).toThrow();
+    expect(() => verifyGatekeeperAssessment("Errand.app: accepted\nsource=Developer ID\n")).toThrow();
   });
 });

@@ -46,7 +46,8 @@ describe("RuntaCloudAgentsClient", () => {
     ]);
     expect(await client.createAgent({ name: "Reviewer", modelProviderId: "provider-1" })).toEqual(expect.objectContaining({ id: "agent-2", status: "idle" }));
     expect(await client.updateAgent("agent-1", { name: "Atlas" })).toEqual(expect.objectContaining({ id: "agent-1", name: "Atlas" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("Be concise, practical, and honest"), initial_message: expect.stringContaining("Hi, I'm Reviewer, your Runta Crew agent."), model_provider: { type: "managed", id: "provider-1" } }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ name: "Reviewer", system_prompt: expect.stringContaining("the user's Errand agent"), initial_message: expect.stringContaining("Hi, I'm Reviewer, your Errand agent."), model_provider: { type: "managed", id: "provider-1" } }) }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ initial_message: expect.stringMatching(/^\[Runta Crew bootstrap\] \[Errand\] "Reviewer"\n/) }) }));
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: "/v2/agents", body: expect.objectContaining({ system_prompt: expect.stringContaining("available files, terminal, browser, and computer tools") }) }));
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
@@ -333,7 +334,7 @@ describe("RuntaCloudAgentsClient", () => {
     expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "I am Atlas." }], streaming: false })]);
   });
 
-  it("returns the deterministic Crew greeting without another cloud request", async () => {
+  it("returns the deterministic Errand greeting without another cloud request", async () => {
     const request = vi.fn();
     window.runtaCrew = { cloud: { request, subscribe: () => () => undefined } } as unknown as DesktopBridge;
 
@@ -342,6 +343,41 @@ describe("RuntaCloudAgentsClient", () => {
     expect(request).not.toHaveBeenCalled();
     expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text: "Hello, I'm Atlas, and I'm all set.\nWhat can I help you tackle?" }], streaming: false })]);
     expect(messages[0]?.parts[0]?.type === "text" ? messages[0].parts[0].text.split("\n") : []).toHaveLength(2);
+  });
+
+  it("uses Errand in newly generated branded greetings", async () => {
+    const request = vi.fn();
+    window.runtaCrew = { cloud: { request, subscribe: () => () => undefined } } as unknown as DesktopBridge;
+
+    const messages = await new RuntaCloudAgentsClient().waitForInitialReply("agent-0", "Atlas");
+
+    expect(messages[0]?.parts).toEqual([{ type: "text", text: "Hi, I'm Atlas, your Errand agent.\nPoint me at a task and I'll get started." }]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it.each(["new synthetic", "legacy synthetic", "genuine model", "unconfirmed"] as const)("preserves the correct brand when replaying a %s bootstrap", async (kind) => {
+    const legacyReply = "Hi, I'm Atlas, your Runta Crew agent.";
+    const newPrompt = `[Runta Crew bootstrap] [Errand] "Atlas"\nReply with exactly these two short sentences: "Hi, I'm Atlas, your Errand agent." "Tell me what you're working on and I'll jump in." Do not add anything else.`;
+    const prompt = kind === "legacy synthetic" ? `[Runta Crew bootstrap] Reply with exactly these two short sentences: "Hi, I'm Atlas, your Runta Crew agent." "Tell me what you're working on and I'll jump in." Do not add anything else.` : newPrompt;
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.startsWith("/v2/agents?") ? { agents: [{ id: "agent-0", runtime_id: "agent-0", name: "Atlas", status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 2, latest_reply: { run_id: "bootstrap-run", text: legacyReply } }] } : path.includes("/artifacts?") ? [] : [{ id: "bootstrap-run", agent_id: "agent-0", status: "finished", prompt, result: legacyReply, error: null }] }));
+    const subscribe = (_path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        // The REST response omits stop_reason; only this run's SSE snapshot proves it was synthetic.
+        if (kind !== "unconfirmed") listener({ event: "run.status", data: { id: "bootstrap-run", status: "finished", stop_reason: kind === "genuine model" ? "end_turn" : "synthetic" } });
+        if (kind === "genuine model") listener({ event: "pi.event", data: { type: "message_update", message: { id: "original-reply" }, assistantMessageEvent: { type: "text_delta", delta: legacyReply } } });
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    };
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const client = new RuntaCloudAgentsClient();
+    expect((await client.listAgents())[0].lastMessagePreview).toBe(legacyReply);
+    const { messages } = await client.getConversation("conversation-agent-0");
+
+    const text = kind === "new synthetic" ? "Hi, I'm Atlas, your Errand agent.\nPoint me at a task and I'll get started." : legacyReply;
+    expect(messages).toEqual([expect.objectContaining({ role: "agent", parts: [{ type: "text", text }], streaming: false })]);
+    expect((await client.listAgents())[0].lastMessagePreview).toBe(text);
   });
 
   it("discovers a locally created run immediately instead of waiting for fallback polling", async () => {

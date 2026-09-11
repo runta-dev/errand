@@ -14,7 +14,7 @@ export function LoginPage({ status, error, allowConnectionSettings, onSignIn, on
   }, [allowConnectionSettings]);
   return <main className="login-page">
     <section className="login-panel" aria-labelledby="login-title">
-      <div className="login-brand"><img src={runtaIcon} alt="" /><h1 id="login-title">Runta Crew</h1></div>
+      <div className="login-brand"><img src={runtaIcon} alt="" /><h1 id="login-title">Errand</h1></div>
       <p>Your cloud agents, ready to take on real work.</p>
       <button className="login-primary" disabled={status === "pending"} onClick={onSignIn}>
         {status === "pending" ? <><LoaderCircle className="spin" size={18} /> Waiting for authorization…</> : <>Sign in <ArrowRight size={18} /></>}

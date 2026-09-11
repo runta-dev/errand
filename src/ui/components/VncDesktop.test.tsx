@@ -98,7 +98,7 @@ it("explains unsupported VNC credential requests instead of waiting indefinitely
   render(<VncDesktop session={{ url: "wss://vnc.example.test/", protocols: [], mode: "remote" }} onClose={vi.fn()} onReconnect={vi.fn()} />);
   await waitFor(() => expect(instances).toHaveLength(1));
   act(() => instances[0].dispatchEvent(new CustomEvent("credentialsrequired", { detail: { types: ["password"] } })));
-  expect(screen.getByText("Cloud computer requires VNC credentials that Runta Crew cannot provide.")).toBeInTheDocument();
+  expect(screen.getByText("Cloud computer requires VNC credentials that Errand cannot provide.")).toBeInTheDocument();
   expect(instances[0].disconnect).toHaveBeenCalledOnce();
   expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
 });
