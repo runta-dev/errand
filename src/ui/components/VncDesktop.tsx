@@ -54,6 +54,7 @@ export function VncSurface({ session, viewOnly, compact = false, onReconnect, on
       if (cancelled || failed || !target.current) return;
       rfb = new RFB(target.current, session.url, { shared: true, wsProtocols: session.protocols });
       rfb.viewOnly = viewOnly; rfb.scaleViewport = true; rfb.resizeSession = false;
+      if (compact) rfb.background = "transparent";
       rfb.addEventListener("connect", connected); rfb.addEventListener("disconnect", disconnected); rfb.addEventListener("securityfailure", securityFailure); rfb.addEventListener("credentialsrequired", credentialsRequired);
     }).catch(() => fail("Could not load the cloud computer client."));
     return () => { cancelled = true; stopConnectionWait(); stopFrameWait(); rfb?.removeEventListener("connect", connected); rfb?.removeEventListener("disconnect", disconnected); rfb?.removeEventListener("securityfailure", securityFailure); rfb?.removeEventListener("credentialsrequired", credentialsRequired); rfb?.disconnect(); };
