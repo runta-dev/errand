@@ -1,35 +1,83 @@
 <div align="center">
 
+<img src="./build/icon.png" width="96" height="96" alt="Errand" />
+
 # Errand
 
-### Your cloud agents, ready to take on real work.
+### Give your agents a computer. Then give them a job.
 
-Build your AI team. Give them a job. Come back to finished work.
+A desktop home for persistent AI teammates, powered by Runta.
 
-[Runta](https://runta.com) · macOS · Powered by Runta Cloud Agents
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-181818?style=flat-square&logo=apple&logoColor=white)](#quick-start) [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-F07818?style=flat-square)](#quick-start) [![Electron](https://img.shields.io/badge/Electron-44-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Powered by Runta](https://img.shields.io/badge/Powered_by-Runta-F07818?style=flat-square)](https://runta.com/)
+
+**[Quick start](#quick-start)** · **[Releases](https://github.com/runta-dev/runta-crew/releases)** · **[How it works](#how-it-works)** · **[Discord](https://discord.gg/62d4bkaTnS)**
+
+<img src="./docs/screenshots/errand.gif" width="960" alt="Errand demo: chat with cloud agents and view their computers" />
+
+<sub>Your agents have a workspace to come back to. So do you.</sub>
 
 </div>
 
-![Errand](./docs/screenshots/errand-login.png)
+## Meet your new teammates
 
-## Your AI team has a computer now
+Create an agent, give it a task, and follow its work from your Mac. Each agent has its own cloud computer, files, and conversation history. Close the app and return to the same workspace later.
 
-Errand is a desktop home for persistent cloud agents. Each teammate runs inside its own Runta Runtime, keeps its workspace, and continues working after you close the app.
+Errand brings persistent agents into a familiar desktop experience: a team in the sidebar, a conversation for each agent, and a live view of the computer doing the work.
 
-No tab jungle. No babysitting terminal sessions. Just message your agents and let them work.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-## Built for delegation
+### 🖥️ A computer for every agent
 
-- **Agents that stick around** — create focused agents with persistent cloud workspaces.
-- **Real work, not chat theater** — follow live activity, tool use, approvals, and results.
-- **Pick up where you left off** — conversations and completed runs stay with each agent.
-- **Cloud-native by default** — the desktop app connects directly to Runta Cloud Agents.
-- **Quietly native** — a fast, minimal macOS experience with notifications and deep links.
-- **Secure at the boundary** — device authorization and credentials protected by Electron `safeStorage`.
+Each agent runs in its own Runta Runtime, with a cloud workspace for its files, tools, and ongoing work.
 
-## Run it locally
+</td>
+<td width="50%" valign="top">
 
-Requires macOS, Node.js 22+, and npm 10+.
+### 💬 Keep the conversation going
+
+Return to previous conversations and completed runs. Send a follow-up without rebuilding the context from scratch.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 👀 See the work happen
+
+Follow tool activity and available output. Open the live desktop when you need to see what the agent sees.
+
+</td>
+<td width="50%" valign="top">
+
+### 🖼️ Show what you mean
+
+Attach an image to your message and send it as native image input to the agent. Attachments stay with the conversation.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### ☁️ Pick up where you left off
+
+Execution lives in the cloud. Reopen Errand to reconnect with your agents and retrieve their latest work.
+
+</td>
+<td width="50%" valign="top">
+
+### 🔐 Keep credentials protected
+
+Browser-based authorization and OS-backed credential encryption, with a narrow bridge between the UI and native code.
+
+</td>
+</tr>
+</table>
+
+## Quick start
+
+**macOS 13+ · Apple Silicon · Node.js 22–26 · npm 10+**
 
 ```bash
 git clone https://github.com/runta-dev/runta-crew.git
@@ -38,16 +86,52 @@ npm ci
 npm run dev
 ```
 
+1. **Sign in** through your browser using your Runta account.
+2. **Create an agent** and give it a focused job.
+3. **Follow the work** in the conversation, tool activity, or live desktop.
+
+Running the desktop app locally connects to **Runta Cloud Agents**. You need a Runta account and model access configured for your agents.
+
+<details>
+<summary><strong>Connection settings</strong></summary>
+
 The app defaults to:
 
-- Cloud Agents API: `https://api.runta.me`
-- Runta Dashboard: `https://dashboard.runta.me`
+| Service | Address |
+| --- | --- |
+| Cloud Agents API | `https://api.runta.me` |
+| Runta Dashboard | `https://dashboard.runta.me` |
 
-Development builds can override these addresses in Connection settings. The E2E script accepts a `ERRAND_E2E_ENDPOINT` override.
+Development builds can override these addresses in **Connection settings**. The E2E script accepts an `ERRAND_E2E_ENDPOINT` override.
 
-Errand uses the real Cloud Agents API. There is no local demo transport or silent mock fallback.
+</details>
 
-## Ship with confidence
+## How it works
+
+```text
+Your Mac                          Runta Cloud
+┌─────────────────────┐           ┌──────────────────────────┐
+│ Errand              │           │ Cloud Agents API         │
+│                     │           │                          │
+│ Conversations       │ ◀───────▶ │ Agents · Runs · Events   │
+│ Activity & results  │           │ Artifacts · Sessions     │
+│ Live computer view  │           └────────────┬─────────────┘
+└─────────────────────┘                        │
+                                  ┌────────────▼─────────────┐
+                                  │ Each agent's runtime     │
+                                  │ Files · Tools · Browser  │
+                                  └──────────────────────────┘
+```
+
+The **React renderer** handles the interface. A **typed preload bridge** exposes specific desktop operations. **Electron main** owns authentication, encrypted credentials, and the allowlisted Cloud API broker. **Runta** provides the agent runtimes and their lifecycle.
+
+The desktop client and Runta transport are separate layers. Connecting a different backend requires implementing the agent, run, event, artifact, and computer-session contracts.
+
+## Build with us
+
+Found a rough edge? [Open an issue](https://github.com/runta-dev/runta-crew/issues). Have an improvement? [Send a pull request](https://github.com/runta-dev/runta-crew/pulls).
+
+Useful contributions include clearer activity and error states, more accessible interactions, and reproducible reports of connection or attachment problems. Include the steps to reproduce, what you expected, and what happened.
 
 ```bash
 npm run typecheck
@@ -56,24 +140,33 @@ npm test
 npm run build
 ```
 
-For the authenticated end-to-end flow:
+<details>
+<summary><strong>Authenticated end-to-end checks</strong></summary>
 
 ```bash
 ERRAND_E2E_TOKEN=... npm run test:e2e
 ```
 
-Package and smoke-test the macOS app:
+Use a test account and keep tokens out of commits and logs.
+
+</details>
+
+<details>
+<summary><strong>Local macOS packaging</strong></summary>
 
 ```bash
 npm run package
 npm run smoke
 ```
 
-Artifacts are written to `release/`. `npm run package` creates ad-hoc signed builds for local testing; these are not public distribution artifacts.
+Artifacts are written to `release/`. Local packaging creates ad-hoc signed builds for testing. Use the signed release workflow for distribution.
 
-Packaging converts the DMG to native ULMO (LZMA level 9), verifies its contents, and refreshes its blockmap and update metadata. ULMO requires macOS 10.15 or later; Errand requires macOS 13 or later. The DMG compression step leaves ZIP artifacts unchanged.
+The DMG uses native ULMO (LZMA level 9) compression. Packaging verifies its contents and refreshes its blockmap and update metadata. Errand requires macOS 13 or later. ZIP artifacts are unchanged by the DMG compression step.
 
-## Signed macOS releases
+</details>
+
+<details>
+<summary><strong>Release signing and notarization</strong></summary>
 
 The [release workflow](.github/workflows/publish-release.yml) runs `npm run package:release`. Public releases require a real **Developer ID Application** certificate, successful Apple notarization, and stapled app and DMG tickets. ULMO level 9 compression happens before final DMG signing; release hashes, blockmaps, and update metadata must describe the final artifacts.
 
@@ -107,14 +200,27 @@ To validate a feature branch before the release workflow reaches the default bra
 
 A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `errand-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
 
-## Brand assets
+</details>
 
-The Errand [SVG icon](src/assets/errand-icon.svg) uses the same `beam` variant of [boring-avatars](https://github.com/boringdesigners/boring-avatars) as the agents in the app. The Dock icon uses the selected Atlas seed with the app's original palette, configured in `src/shared/avatarStyle.json`; the generated avatar artwork is unchanged apart from the macOS icon mask and padding. `npm run build:icons` generates the SVG, PNG, and macOS ICNS files; development and release builds run it automatically. The app, Dock, and installer use the same artwork. The library's MIT notice is included in the packaged app.
-
-## Upgrade compatibility
+<details>
+<summary><strong>Upgrading from Runta Crew</strong></summary>
 
 Errand uses its own `Errand Safe Storage` macOS keychain entry and `~/Library/Application Support/Errand` profile. The first launch starts signed out; authorize Errand again to access your existing cloud agents. Legacy Runta Crew credentials, settings, and browser data remain untouched and are not migrated or decrypted. The `com.runta.crew` application identity stays unchanged for signed updates. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.
 
-## Under the hood
+</details>
 
-Errand keeps the security boundary small: Electron main owns native lifecycle, authorization, encrypted credentials, and the allowlisted Cloud API broker; preload exposes a narrow typed bridge; React handles the product experience.
+## Credits
+
+The Errand [SVG icon](src/assets/errand-icon.svg) uses the same `beam` variant of [boring-avatars](https://github.com/boringdesigners/boring-avatars) as the agents in the app. The Dock icon uses the selected Atlas seed with the app's original palette, configured in `src/shared/avatarStyle.json`; the generated avatar artwork is unchanged apart from the macOS icon mask and padding. `npm run build:icons` generates the SVG, PNG, and macOS ICNS files; development and release builds run it automatically. The app, Dock, and installer use the same artwork. The library's MIT notice is included in the packaged app.
+
+The project is built with [Electron](https://www.electronjs.org/), [React](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), and [noVNC](https://novnc.com/), on [Runta Cloud Agents](https://runta.com/).
+
+---
+
+<div align="center">
+
+**If Errand earns a place in your Dock, [give it a star](https://github.com/runta-dev/runta-crew). ⭐**
+
+Built by [Runta](https://runta.com/) · [Join the conversation](https://discord.gg/62d4bkaTnS)
+
+</div>
