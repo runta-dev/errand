@@ -4,9 +4,9 @@ import { isTrustedVncRenderer, VncOriginGrants, type VncOriginContext } from "./
 const now = Date.parse("2026-09-09T08:00:00Z");
 const nonce = "94b34170-31b4-453b-8135-afcdde214035";
 const sessionUrl = `wss://vnc.runta.me/?crew_session=${nonce}`;
-const context: VncOriginContext = { endpoint: "https://api.runta.me", dashboardUrl: "https://dashboard.runta.me", rendererUrl: "http://localhost:5173/", rendererOrigin: "http://localhost:5173", webContentsId: 7 };
+const context: VncOriginContext = { endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", rendererUrl: "http://localhost:5173/", rendererOrigin: "http://localhost:5173", webContentsId: 7 };
 const body = { agent_id: "agent-1", expires_at: new Date(now + 15_000).toISOString(), channels: { vnc: { websocket_url: "wss://vnc.runta.me/", protocols: ["binary", "vnc-ticket.issued-ticket"] } } };
-const response = { url: "https://api.runta.me/v2/agents/agent-1/computer-sessions", method: "POST", status: 200, body };
+const response = { url: "https://api.runta.com/v2/agents/agent-1/computer-sessions", method: "POST", status: 200, body };
 // Chromium does not expose Sec-WebSocket-Protocol to Electron's request hook.
 const request = { url: sessionUrl, method: "GET", resourceType: "webSocket", webContentsId: 7, requestHeaders: { Origin: "http://localhost:5173", Upgrade: "websocket", Other: "preserved" } };
 
@@ -23,7 +23,7 @@ describe("VncOriginGrants", () => {
     expect(returned).toEqual({ ...body, channels: { vnc: { ...body.channels.vnc, websocket_url: sessionUrl } } });
     expect(body.channels.vnc.websocket_url).toBe("wss://vnc.runta.me/");
     expect(new URL(sessionUrl).search).not.toContain("issued-ticket");
-    expect(grants.headersFor(request, context, now)).toEqual({ ...request.requestHeaders, Origin: "https://dashboard.runta.me" });
+    expect(grants.headersFor(request, context, now)).toEqual({ ...request.requestHeaders, Origin: "https://dashboard.runta.com" });
     expect(request.requestHeaders.Origin).toBe("http://localhost:5173");
     expect(grants.headersFor(request, context, now + 1)).toBeUndefined();
   });
@@ -34,7 +34,7 @@ describe("VncOriginGrants", () => {
     grants.remember(response, packaged, grants.revision, nonce, now);
     expect(grants.headersFor(request, packaged, now)).toBeUndefined();
     expect(grants.headersFor({ ...request, requestHeaders: { origin: "null" } }, packaged, now)).toBeUndefined();
-    expect(grants.headersFor({ ...request, requestHeaders: { origin: "file://" } }, packaged, now)).toEqual({ Origin: "https://dashboard.runta.me" });
+    expect(grants.headersFor({ ...request, requestHeaders: { origin: "file://" } }, packaged, now)).toEqual({ Origin: "https://dashboard.runta.com" });
   });
 
   it.each([
@@ -84,8 +84,8 @@ describe("VncOriginGrants", () => {
   it.each([
     { status: 401 }, { method: "GET" },
     { url: "https://api.other.example/v2/agents/agent-1/computer-sessions" },
-    { url: "https://api.runta.me/v2/agents" },
-    { url: "https://api.runta.me/v2/agents/agent-1/computer-sessions?extra=1" },
+    { url: "https://api.runta.com/v2/agents" },
+    { url: "https://api.runta.com/v2/agents/agent-1/computer-sessions?extra=1" },
     { body: {} }, { body: { ...body, expires_at: "invalid" } },
     { body: { ...body, expires_at: new Date(now).toISOString() } },
     { body: { ...body, channels: { vnc: { ...body.channels.vnc, websocket_url: "ws://vnc.runta.me/" } } } },

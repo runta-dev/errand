@@ -99,8 +99,8 @@ The app defaults to:
 
 | Service | Address |
 | --- | --- |
-| Cloud Agents API | `https://api.runta.me` |
-| Runta Dashboard | `https://dashboard.runta.me` |
+| Cloud Agents API | `https://api.runta.com` |
+| Runta Dashboard | `https://dashboard.runta.com` |
 
 Development builds can override these addresses in **Connection settings**. The E2E script accepts an `ERRAND_E2E_ENDPOINT` override.
 
@@ -194,18 +194,23 @@ base64 < "/path/to/AuthKey.p8" | tr -d '\n' | pbcopy
 
 Enter the certificate password directly in GitHub's secret form. Keep private keys and passwords out of commits, logs, terminal arguments, and chat.
 
-Once the workflow is on the repository's default branch, **Actions → Publish macOS Release** provides manual runs with `dry_run=true` by default. Enter a tag matching `package.json`'s version, with an optional `v` prefix. The optional `ref` override is available only for dry runs; otherwise the workflow builds the release tag.
+For a formal release:
 
-To validate a feature branch before the release workflow reaches the default branch, dispatch the existing **CI** workflow on that branch with `signed_release=true` and `release_tag` matching `package.json`. This entry reuses the release workflow in dry-run mode, including signing, notarization, and artifact verification.
+1. Open **Actions → [Publish macOS Release](https://github.com/runta-dev/errand/actions/workflows/publish-release.yml)**, select `main`, set `dry_run=true`, enter a `tag` matching `package.json`'s version (with an optional `v` prefix), and leave `ref` empty. This signs, notarizes, staples, and verifies the build, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` as `errand-macos-arm64-<version>` without publishing a GitHub Release.
+2. After verification succeeds, run **[Publish verified CI artifact](https://github.com/runta-dev/errand/actions/workflows/promote-release.yml)** with that successful run's ID as `source_run_id` and Markdown release notes as `notes`. It verifies and publishes the same signed artifacts without rebuilding them.
 
-A dry run still performs signing, notarization, stapling, and verification, then saves DMG, ZIP, blockmaps, and `latest-mac.yml` in the Actions artifact `errand-macos-arm64-<version>`. It skips GitHub Release uploads. Publishing a GitHub Release triggers the workflow automatically; a manual run with `dry_run=false` uploads to an existing release. Use a dry run to validate the environment first.
+For feature-branch validation, run **[CI](https://github.com/runta-dev/errand/actions/workflows/ci.yml)** on that branch with `signed_release=true` and `release_tag` matching `package.json`. Formal artifact promotion requires a successful run of `publish-release.yml`; feature CI runs are validation-only.
+
+Publishing a GitHub Release directly triggers a new build; a manual `Publish macOS Release` run with `dry_run=false` builds the release tag and uploads to an existing release. Use the promotion flow above to publish already verified artifacts.
 
 </details>
 
 <details>
 <summary><strong>Upgrading from Runta Crew</strong></summary>
 
-Errand uses its own `Errand Safe Storage` macOS keychain entry and `~/Library/Application Support/Errand` profile. The first launch starts signed out; authorize Errand again to access your existing cloud agents. Legacy Runta Crew credentials, settings, and browser data remain untouched and are not migrated or decrypted. The `com.runta.crew` application identity stays unchanged for signed updates. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables. The GitHub repository and Runta service endpoints retain their existing addresses.
+Errand uses its own `Errand Safe Storage` macOS keychain entry and `~/Library/Application Support/Errand` profile. After upgrading from Runta Crew, sign in to Errand through the configured Runta Dashboard. Legacy Runta Crew credentials, settings, and browser data remain untouched and are not migrated or decrypted. The `com.runta.crew` application identity stays unchanged for signed updates. Existing `runta-crew://agent/...` links, backend client identifiers, and `RUNTA_CREW_*` development environment variables remain supported alongside the new `errand://` links and `ERRAND_*` variables.
+
+Default connections now use `https://api.runta.com` and `https://dashboard.runta.com`. The repository and [release downloads](https://github.com/runta-dev/errand/releases) are available at [runta-dev/errand](https://github.com/runta-dev/errand).
 
 </details>
 

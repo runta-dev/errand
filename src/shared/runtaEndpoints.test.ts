@@ -12,11 +12,11 @@ import {
 
 describe("Runta public endpoints", () => {
   it("uses the public Runta API and dashboard hosts", () => {
-    expect(DEFAULT_RUNTA_API_URL).toBe("https://api.runta.me");
-    expect(DEFAULT_RUNTA_DASHBOARD_URL).toBe("https://dashboard.runta.me");
-    expect(deviceAuthorizationUrl(DEFAULT_RUNTA_API_URL)).toBe("https://api.runta.me/v2/auth/device/authorization");
-    expect(deviceTokenUrl(DEFAULT_RUNTA_API_URL)).toBe("https://api.runta.me/v2/auth/device/token");
-    expect(deviceAuthorizationRequest("Errand on darwin", `${DEFAULT_RUNTA_DASHBOARD_URL}/`)).toEqual({ client_id: "runta_crew", device_name: "Errand on darwin", app_url: "https://dashboard.runta.me" });
+    expect(DEFAULT_RUNTA_API_URL).toBe("https://api.runta.com");
+    expect(DEFAULT_RUNTA_DASHBOARD_URL).toBe("https://dashboard.runta.com");
+    expect(deviceAuthorizationUrl(DEFAULT_RUNTA_API_URL)).toBe("https://api.runta.com/v2/auth/device/authorization");
+    expect(deviceTokenUrl(DEFAULT_RUNTA_API_URL)).toBe("https://api.runta.com/v2/auth/device/token");
+    expect(deviceAuthorizationRequest("Errand on darwin", `${DEFAULT_RUNTA_DASHBOARD_URL}/`)).toEqual({ client_id: "runta_crew", device_name: "Errand on darwin", app_url: "https://dashboard.runta.com" });
     expect(deviceTokenRequest("device-code")).toEqual({ device_code: "device-code" });
   });
 

@@ -95,7 +95,7 @@ function createWindow() {
     if (smokeMarker) {
       const frame = window.webContents.mainFrame;
       const context = vncOriginContext();
-      writeFileSync(smokeMarker, JSON.stringify({ ready: true, applicationName: app.getName(), userData: app.getPath("userData"), sessionData: app.getPath("sessionData"), windowTitle: window.getTitle(), rendererUrl: frame.url, rendererOrigin: frame.origin, vncOrigin: context?.rendererOrigin }));
+      writeFileSync(smokeMarker, JSON.stringify({ ready: true, applicationName: app.getName(), apiEndpoint: settings.endpoint, dashboardUrl: settings.dashboardUrl, userData: app.getPath("userData"), sessionData: app.getPath("sessionData"), windowTitle: window.getTitle(), rendererUrl: frame.url, rendererOrigin: frame.origin, vncOrigin: context?.rendererOrigin }));
       app.quit(); return;
     }
     const screenshotPath = nativeEnvironmentValue(process.env, "SCREENSHOT_PATH");

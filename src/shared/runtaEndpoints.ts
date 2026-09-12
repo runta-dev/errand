@@ -1,5 +1,5 @@
-export const DEFAULT_RUNTA_API_URL = "https://api.runta.me";
-export const DEFAULT_RUNTA_DASHBOARD_URL = "https://dashboard.runta.me";
+export const DEFAULT_RUNTA_API_URL = "https://api.runta.com";
+export const DEFAULT_RUNTA_DASHBOARD_URL = "https://dashboard.runta.com";
 
 export function normalizeRuntaApiUrl(value: string | undefined): string {
   const configured = value?.trim().replace(/\/+$/, "") ?? "";
