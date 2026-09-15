@@ -160,7 +160,7 @@ export function App() {
         setSettingsOpen(true);
         return;
       }
-      const agent = await crew.createAgent({ name, modelProviderId: provider.id });
+      const agent = await crew.createAgent({ name, modelProviderId: provider.id, systemPrompt: settings?.systemPrompt });
       setCreatingAgentPhase("typing");
       const greeting = await client.waitForInitialReply(agent.id, agent.name);
       setDetailsOpen(false);

@@ -1,3 +1,4 @@
+import { normalizeSystemPrompt } from "../../src/domain/agentPrompt";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, Notification, safeStorage, shell } from "electron";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, basename } from "node:path";
@@ -55,7 +56,7 @@ function loadSettings(): AppSettings {
     const theme = value.theme === "dark" || value.theme === "system" ? value.theme : "light";
     const endpoint = normalizeRuntaApiUrl(typeof value.endpoint === "string" ? value.endpoint : undefined);
     const dashboardUrl = normalizeRuntaDashboardUrl(typeof value.dashboardUrl === "string" ? value.dashboardUrl : undefined);
-    return { endpoint: isDev ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme, modelProviderId: typeof value.modelProviderId === "string" && value.modelProviderId.trim() ? value.modelProviderId : undefined };
+    return { endpoint: isDev ? endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? dashboardUrl : defaultSettings.dashboardUrl, notifications: value.notifications !== false, theme, systemPrompt: normalizeSystemPrompt(value.systemPrompt), modelProviderId: typeof value.modelProviderId === "string" && value.modelProviderId.trim() ? value.modelProviderId : undefined };
   } catch { return settings; }
 }
 
@@ -139,8 +140,10 @@ ipcMain.handle("desktop:openExternal", (_event, url: string) => {
 ipcMain.handle("settings:get", () => settings);
 ipcMain.handle("settings:set", (_event, next: AppSettings) => {
   vncOriginGrants.clear();
-  settings = { ...next, endpoint: isDev ? next.endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? next.dashboardUrl : defaultSettings.dashboardUrl };
-  writeFileSync(settingsFile(), JSON.stringify(settings, null, 2), { mode: 0o600 }); return settings;
+  const systemPrompt = normalizeSystemPrompt(next.systemPrompt);
+  const updated = { ...next, systemPrompt, endpoint: isDev ? next.endpoint : defaultSettings.endpoint, dashboardUrl: isDev ? next.dashboardUrl : defaultSettings.dashboardUrl };
+  writeFileSync(settingsFile(), JSON.stringify(updated, null, 2), { mode: 0o600 });
+  settings = updated; return settings;
 });
 ipcMain.handle("credentials:has", () => existsSync(credentialFile()) && readFileSync(credentialFile()).length > 0);
 ipcMain.handle("credentials:set", (_event, token: string | null) => {

@@ -57,6 +57,14 @@ describe("RuntaCloudAgentsClient", () => {
     expect(request).toHaveBeenCalledWith({ method: "PATCH", path: "/v2/agents/agent-1", body: { name: "Atlas" } });
   });
 
+  it("sends the saved prompt with literal, quoted agent names", async () => {
+    const agent = { id: "agent-custom", runtime_id: "agent-custom", name: '$& "Atlas"', status: "running", created_at_unix_seconds: 1, updated_at_unix_seconds: 1 };
+    const request = vi.fn(async () => ({ status: 200, body: agent }));
+    window.runtaCrew = { cloud: { request } } as unknown as DesktopBridge;
+    await new RuntaCloudAgentsClient().createAgent({ name: agent.name, modelProviderId: "provider-1", systemPrompt: "You are {agent_name}. Verify your work, {agent_name}." });
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", path: "/v2/agents", body: expect.objectContaining({ system_prompt: `You are ${JSON.stringify(agent.name)}. Verify your work, ${JSON.stringify(agent.name)}.` }) }));
+  });
+
   it("translates the authenticated run SSE stream without exposing credentials", async () => {
     let streamListener: ((event: CloudStreamEvent) => void) | undefined;
     const subscribe = vi.fn((_path: string, listener: (event: CloudStreamEvent) => void) => { streamListener = listener; return () => undefined; });

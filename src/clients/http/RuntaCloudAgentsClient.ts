@@ -1,3 +1,4 @@
+import { agentSystemPrompt } from "@/domain/agentPrompt";
 import type { CloudAgentsClient } from "@/domain/CloudAgentsClient";
 import { CrewError, type ActivityEvent, type Agent, type ApprovalRequest, type Attachment, type CloudComputer, type CloudComputerSession, type ConversationEvent, type CreateAgentInput, type Message, type ModelProviderCatalog, type RespondApprovalInput, type SendMessageInput, type Subscription, type UpdateAgentInput } from "@/domain/types";
 import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
@@ -24,7 +25,6 @@ const LEGACY_IDENTITY_INITIAL_MESSAGE = "Introduce yourself briefly using only t
 const INITIAL_MESSAGE_PREFIX = "[Runta Crew bootstrap] ";
 const ERRAND_BOOTSTRAP_PREFIX = `${INITIAL_MESSAGE_PREFIX}[Errand] `;
 const initialMessage = (name: string) => `${ERRAND_BOOTSTRAP_PREFIX}${JSON.stringify(name)}\nReply with exactly these two short sentences: ${JSON.stringify(`Hi, I'm ${name}, your Errand agent.`)} ${JSON.stringify("Tell me what you're working on and I'll jump in.")} Do not add anything else.`;
-const crewSystemPrompt = (name: string) => `You are ${JSON.stringify(name)}, the user's Errand agent. Complete tasks using the available files, terminal, browser, and computer tools; verify results before reporting them. Be concise, practical, and honest. Do not use emoji unless asked. Do not proactively mention underlying models or implementation details.`;
 const crewGreeting = (agentId: string, name: string) => {
   let hash = 0x811c9dc5;
   for (const byte of new TextEncoder().encode(agentId)) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
@@ -169,7 +169,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async getAgent(agentId: string, _signal?: AbortSignal) { void _signal; return this.mapAgent(await this.request<RuntaAgent>({ method: "GET", path: `/v2/agents/${encodeURIComponent(agentId)}` })); }
   async createAgent(input: CreateAgentInput, _signal?: AbortSignal) {
     if (!input.modelProviderId) throw new CrewError("contract_pending", "Select a managed model provider before creating an Errand agent");
-    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, system_prompt: crewSystemPrompt(input.name), initial_message: initialMessage(input.name), model_provider: { type: "managed", id: input.modelProviderId } } });
+    const created = await this.request<RuntaAgent>({ method: "POST", path: "/v2/agents", body: { name: input.name, system_prompt: agentSystemPrompt(input.name, input.systemPrompt), initial_message: initialMessage(input.name), model_provider: { type: "managed", id: input.modelProviderId } } });
     const ready = await this.waitForAgentRunning(created.id, _signal);
     return this.mapAgent(ready);
   }

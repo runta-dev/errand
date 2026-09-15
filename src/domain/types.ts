@@ -20,7 +20,7 @@ export interface CloudComputer { id: string; agentId: string; runtimeName: strin
 export interface CloudComputerSession { url: string; protocols: string[]; mode: "remote" }
 export interface ModelProviderOption { id: string; name: string; protocol: string; defaultModel?: string }
 export interface ModelProviderCatalog { organizationId: string; providers: ModelProviderOption[] }
-export interface CreateAgentInput { name: string; modelProviderId: string }
+export interface CreateAgentInput { name: string; modelProviderId: string; systemPrompt?: string }
 export interface UpdateAgentInput { name?: string; role?: string; goal?: string; pinned?: boolean }
 export interface SendMessageInput { conversationId: string; text: string; attachments?: Attachment[]; signal?: AbortSignal }
 export interface RespondApprovalInput { requestId: string; decision: "allow" | "deny"; note?: string }
