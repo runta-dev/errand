@@ -214,6 +214,12 @@ Default connections now use `https://api.runta.com` and `https://dashboard.runta
 
 </details>
 
+## License
+
+Copyright 2026 Runta.
+
+Errand is licensed under the [Apache License, Version 2.0](LICENSE). Third-party components retain their respective licenses and notices.
+
 ## Credits
 
 The Errand [SVG icon](src/assets/errand-icon.svg) uses the same `beam` variant of [boring-avatars](https://github.com/boringdesigners/boring-avatars) as the agents in the app. The Dock icon uses the selected Atlas seed with the app's original palette, configured in `src/shared/avatarStyle.json`; the generated avatar artwork is unchanged apart from the macOS icon mask and padding. `npm run build:icons` generates the SVG, PNG, and macOS ICNS files; development and release builds run it automatically. The app, Dock, and installer use the same artwork. The library's MIT notice is included in the packaged app.

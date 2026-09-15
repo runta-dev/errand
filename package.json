@@ -10,6 +10,7 @@
   "main": "out/main/index.js",
   "description": "Errand — a desktop home for persistent cloud agents",
   "author": "Runta",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22 <27"
   },
@@ -105,6 +106,10 @@
       }
     ],
     "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "licenses/LICENSE"
+      },
       {
         "from": "docs/licenses/boring-avatars.txt",
         "to": "licenses/boring-avatars.txt"
