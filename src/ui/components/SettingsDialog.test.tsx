@@ -47,7 +47,7 @@ it("opens provider creation from a populated picker without changing the selecte
   const user = userEvent.setup();
   render(<SettingsDialog organizationId="org-a/b" providers={[{ id: "existing", name: "OpenAI API", protocol: "openai_responses" }]} onModelProviderOpen={onModelProviderOpen} onClose={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "Model provider" }));
-  await user.click(screen.getByRole("option", { name: "Add model provider…" }));
+  await user.click(screen.getByRole("option", { name: "Add model provider" }));
   expect(openExternal).toHaveBeenCalledWith("https://dashboard.runta.com/org/org-a%2Fb/secrets/providers/new");
   expect(onModelProviderOpen).toHaveBeenCalledOnce();
   expect(set).not.toHaveBeenCalled();

@@ -1,8 +1,8 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export interface SelectOption { value: string; label: string; disabled?: boolean; action?: () => void }
+export interface SelectOption { value: string; label: string; disabled?: boolean; icon?: ReactNode; action?: () => void }
 
 export function Select({ value, options, ariaLabel, placeholder = "Select", onChange, onOpen }: { value: string; options: SelectOption[]; ariaLabel: string; placeholder?: string; onChange(value: string): void; onOpen?(): void }) {
   const [open, setOpen] = useState(false); const [menuStyle, setMenuStyle] = useState<React.CSSProperties>(); const root = useRef<HTMLDivElement>(null); const menu = useRef<HTMLDivElement>(null);
@@ -30,6 +30,6 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
       if (event.key === "Escape") { setOpen(false); return; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(event.key === "ArrowDown" ? 1 : -1); if (!open) onOpen?.(); setOpen(true); }
     }}><span>{selected?.label ?? placeholder}</span><span className="crew-select-chevron"><ChevronDown size={15} /></span></button>
-    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" className={option.action ? "crew-select-action" : undefined} role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}>{!option.action && <span className="crew-select-check">{option.value === value && <Check size={14} />}</span>}<span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
+    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" className={option.action ? "crew-select-action" : undefined} role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}><span className="crew-select-check" aria-hidden="true">{option.action ? option.icon : option.value === value && <Check size={14} />}</span><span title={option.label}>{option.label}</span></button>)}</div>, document.body)}
   </div>;
 }
