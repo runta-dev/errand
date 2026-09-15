@@ -38,3 +38,18 @@ it("keeps unsaved text and reports a settings write failure", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Disk is full");
   expect(screen.getByLabelText("System prompt")).toHaveValue("Custom instructions");
 });
+
+it("opens provider creation from a populated picker without changing the selected provider", async () => {
+  const stored: AppSettings = { endpoint: "https://api.runta.com", dashboardUrl: "https://dashboard.runta.com", theme: "light", notifications: true, modelProviderId: "existing" };
+  const set = vi.fn(async (next: AppSettings) => next);
+  const openExternal = vi.fn(async () => undefined); const onModelProviderOpen = vi.fn();
+  window.runtaCrew = { settings: { get: async () => stored, set }, openExternal } as unknown as DesktopBridge;
+  const user = userEvent.setup();
+  render(<SettingsDialog organizationId="org-a/b" providers={[{ id: "existing", name: "OpenAI API", protocol: "openai_responses" }]} onModelProviderOpen={onModelProviderOpen} onClose={() => undefined} />);
+  await user.click(screen.getByRole("button", { name: "Model provider" }));
+  await user.click(screen.getByRole("option", { name: "Add model provider…" }));
+  expect(openExternal).toHaveBeenCalledWith("https://dashboard.runta.com/org/org-a%2Fb/secrets/providers/new");
+  expect(onModelProviderOpen).toHaveBeenCalledOnce();
+  expect(set).not.toHaveBeenCalled();
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});

@@ -132,9 +132,8 @@ export function App() {
     let stopped = false; let timer: number | undefined;
     const poll = async () => {
       try {
-        const providers = await refreshModelProviders();
+        await refreshModelProviders();
         if (stopped) return;
-        if (providers.length) { setProviderPolling(false); return; }
       } catch { /* keep polling while Settings remains open */ }
       if (!stopped) timer = window.setTimeout(() => void poll(), 2_000);
     };
