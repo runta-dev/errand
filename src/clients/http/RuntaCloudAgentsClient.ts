@@ -5,7 +5,7 @@ import type { CloudRequest, CloudStreamEvent } from "@/shared/desktop";
 
 interface RuntaAgent { id: string; runtime_id: string; name: string; status: string; created_at_unix_seconds: number; updated_at_unix_seconds: number; latest_reply?: { run_id: string; text: string; created_at?: string | null; updated_at?: string | null } | null }
 interface RuntaRun { id: string; agent_id: string; status: string; prompt?: string | null; result?: string | null; error?: string | null; stop_reason?: string | null; dsh_session_id?: string | null; created_at?: string | null; updated_at?: string | null }
-interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null }
+interface ModelProvider { id: string; display_name: string; protocol: string; default_model?: string | null; base_url?: string }
 interface RuntaArtifact { id: string; run_id: string; name: string; media_type: string; size: number }
 interface RuntaComputerSession { channels: { vnc: { websocket_url: string; protocols: string[] } } }
 const INPUT_ARTIFACT_PREFIX = "runta-crew-input-";
@@ -158,7 +158,7 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
   async listModelProviders(_signal?: AbortSignal): Promise<ModelProviderCatalog> {
     void _signal;
     const response = await this.request<{ organization_id: string; model_providers: ModelProvider[] }>({ method: "GET", path: "/v2/model-providers" });
-    return { organizationId: response.organization_id, providers: response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined })) };
+    return { organizationId: response.organization_id, providers: response.model_providers.map((provider) => ({ id: provider.id, name: provider.display_name, protocol: provider.protocol, defaultModel: provider.default_model ?? undefined, baseUrl: provider.base_url })) };
   }
 
   async listAgents(_signal?: AbortSignal) {
