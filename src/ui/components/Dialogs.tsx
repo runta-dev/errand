@@ -52,7 +52,8 @@ export function SettingsDialog({ mode = "preferences", providers = [], organizat
     void window.runtaCrew?.openExternal(url.toString());
   };
   return <div className="dialog-backdrop settings-backdrop" role="presentation"><section className="settings-window" role="dialog" aria-modal="true" aria-label="Settings">
-    <main className="settings-content"><header><h2>Settings</h2><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button></header>
+    <header className="settings-header"><h2>Settings</h2><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button></header>
+    <main className="settings-content">
       <section><h3>Account</h3><div className="settings-card account-card"><span className="settings-account-avatar">{initials}</span><span className="settings-account-copy"><strong>{accountName}</strong>{accountEmail && <small>{accountEmail}</small>}</span>{onLogout && <button className="settings-signout" onClick={onLogout}>Sign out</button>}</div></section>
       <section><h3>Agents</h3><div className="settings-card">{providers.length
         ? <div className="settings-row"><span>Model provider</span><Select ariaLabel="Model provider" placeholder="Select a provider" value={settings.modelProviderId ?? ""} options={providers.map((provider) => ({ value: provider.id, label: provider.name }))} onChange={(modelProviderId) => persist({ ...settings, modelProviderId })} /></div>
