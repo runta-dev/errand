@@ -77,13 +77,13 @@ export function useCrewController(client: CloudAgentsClient, enabled = true) {
     if (!enabled) return;
     const refreshWhenActive = () => {
       if (document.visibilityState === "hidden" || !navigator.onLine) return;
-      void refreshAgents().then(() => setError((current) => isTransientGatewayError(current) ? undefined : current)).catch(() => undefined);
+      void Promise.all([refreshAgents(), refreshModelProviders()]).then(() => setError((current) => isTransientGatewayError(current) ? undefined : current)).catch(() => undefined);
     };
     const onVisibilityChange = () => { if (document.visibilityState === "visible") refreshWhenActive(); };
     const timer = window.setInterval(refreshWhenActive, AGENT_FALLBACK_REFRESH_MS);
     window.addEventListener("focus", refreshWhenActive); window.addEventListener("online", refreshWhenActive); document.addEventListener("visibilitychange", onVisibilityChange);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refreshWhenActive); window.removeEventListener("online", refreshWhenActive); document.removeEventListener("visibilitychange", onVisibilityChange); };
-  }, [enabled, refreshAgents]);
+  }, [enabled, refreshAgents, refreshModelProviders]);
   useEffect(() => {
     if (!enabled) return;
     const cached = snapshots.current.get(selectedAgentId);

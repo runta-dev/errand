@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export interface SelectOption { value: string; label: string; disabled?: boolean; icon?: ReactNode; action?: () => void }
@@ -7,17 +7,19 @@ export interface SelectOption { value: string; label: string; disabled?: boolean
 export function Select({ value, options, ariaLabel, placeholder = "Select", onChange, onOpen }: { value: string; options: SelectOption[]; ariaLabel: string; placeholder?: string; onChange(value: string): void; onOpen?(): void }) {
   const [open, setOpen] = useState(false); const [menuStyle, setMenuStyle] = useState<React.CSSProperties>(); const root = useRef<HTMLDivElement>(null); const menu = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.value === value);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const position = () => {
       const bounds = root.current?.getBoundingClientRect(); if (!bounds) return;
-      const gap = 5; const margin = 8; const width = Math.max(bounds.width, 180); const desiredHeight = Math.min(220, options.length * 32 + 10); const roomBelow = window.innerHeight - bounds.bottom - margin; const openUp = roomBelow < desiredHeight && bounds.top - margin > roomBelow;
+      const labelOverflow = Math.max(0, ...Array.from(menu.current?.querySelectorAll<HTMLElement>(".crew-select-label") ?? []).map((label) => label.scrollWidth - label.clientWidth));
+      const contentWidth = (menu.current?.getBoundingClientRect().width ?? 0) + labelOverflow;
+      const gap = 5; const margin = 8; const width = Math.min(Math.max(bounds.width, contentWidth, 180), window.innerWidth - margin * 2); const desiredHeight = Math.min(220, options.length * 32 + 10); const roomBelow = window.innerHeight - bounds.bottom - margin; const openUp = roomBelow < desiredHeight && bounds.top - margin > roomBelow;
       setMenuStyle({ position: "fixed", zIndex: 100, left: Math.max(margin, Math.min(bounds.right - width, window.innerWidth - width - margin)), top: openUp ? Math.max(margin, bounds.top - desiredHeight - gap) : bounds.bottom + gap, width, maxHeight: openUp ? Math.min(220, bounds.top - gap - margin) : Math.min(220, roomBelow) });
     };
     const close = (event: PointerEvent) => { const target = event.target as Node; if (!root.current?.contains(target) && !menu.current?.contains(target)) setOpen(false); };
     position(); window.addEventListener("pointerdown", close); window.addEventListener("resize", position); window.addEventListener("scroll", position, true);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [open, options.length]);
+  }, [open, options]);
   const move = (direction: 1 | -1) => {
     const available = options.filter((option) => !option.disabled && !option.action); if (!available.length) return;
     const current = available.findIndex((option) => option.value === value);
@@ -30,6 +32,6 @@ export function Select({ value, options, ariaLabel, placeholder = "Select", onCh
       if (event.key === "Escape") { setOpen(false); return; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); move(event.key === "ArrowDown" ? 1 : -1); if (!open) onOpen?.(); setOpen(true); }
     }}><span>{selected?.label ?? placeholder}</span><span className="crew-select-chevron"><ChevronDown size={15} /></span></button>
-    {open && menuStyle && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" className={`${option.action ? "crew-select-action" : ""} ${option.action || option.icon ? "crew-select-has-icon" : ""}`} role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}>{(option.action || option.icon) && <span className="crew-select-check" aria-hidden="true">{option.icon}</span>}<span className="crew-select-label" title={option.label}>{option.label}</span>{!option.action && <span className="crew-select-check" aria-hidden="true">{option.value === value && <Check size={14} />}</span>}</button>)}</div>, document.body)}
+    {open && createPortal(<div className="crew-select-menu crew-select-menu-portal" ref={menu} style={menuStyle ?? { position: "fixed", visibility: "hidden", width: "max-content" }} role="listbox" aria-label={ariaLabel}>{options.map((option) => <button type="button" className={`${option.action ? "crew-select-action" : ""} ${option.action || option.icon ? "crew-select-has-icon" : ""}`} role="option" aria-selected={!option.action && option.value === value} disabled={option.disabled} key={option.value} onClick={() => { option.action?.(); if (!option.action) onChange(option.value); setOpen(false); }}>{(option.action || option.icon) && <span className="crew-select-check" aria-hidden="true">{option.icon}</span>}<span className="crew-select-label" title={option.label}>{option.label}</span>{!option.action && <span className="crew-select-check" aria-hidden="true">{option.value === value && <Check size={14} />}</span>}</button>)}</div>, document.body)}
   </div>;
 }

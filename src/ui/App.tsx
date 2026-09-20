@@ -49,7 +49,7 @@ export function App() {
   const [client, setClient] = useState<RuntaCloudAgentsClient>(() => new RuntaCloudAgentsClient()); const crew = useCrewController(client, signedIn);
   const refreshModelProviders = crew.refreshModelProviders;
   const crewAgents = crew.agents; const selectAgent = crew.setSelectedAgentId;
-  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [detailPanelWidth, setDetailPanelWidth] = useState(340); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [creatingAgentPhase, setCreatingAgentPhase] = useState<"creating" | "typing">("creating"); const [creatingAgentBaselineIds, setCreatingAgentBaselineIds] = useState<ReadonlySet<string>>(() => new Set()); const [composerFocusRequest, setComposerFocusRequest] = useState(0); const [settingsOpen, setSettingsOpen] = useState(false); const [providerPolling, setProviderPolling] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
+  const [search, setSearch] = useState(""); const [detailsOpen, setDetailsOpen] = useState(false); const [detailsMounted, setDetailsMounted] = useState(false); const [detailPanelWidth, setDetailPanelWidth] = useState(340); const [creatingAgentName, setCreatingAgentName] = useState<string>(); const [creatingAgentPhase, setCreatingAgentPhase] = useState<"creating" | "typing">("creating"); const [creatingAgentBaselineIds, setCreatingAgentBaselineIds] = useState<ReadonlySet<string>>(() => new Set()); const [composerFocusRequest, setComposerFocusRequest] = useState(0); const [settingsOpen, setSettingsOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [editingAgent, setEditingAgent] = useState<Agent>(); const [deletingAgent, setDeletingAgent] = useState<Agent>();
   const agents = crew.agents.filter((agent) => `${agent.name} ${agent.role}`.toLowerCase().includes(search.toLowerCase()));
   function readableAuthError(reason: unknown) {
     const raw = reason instanceof Error ? reason.message : "";
@@ -128,24 +128,23 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [detailsOpen]);
   useEffect(() => {
-    if (!settingsOpen || !providerPolling) return;
+    if (!signedIn || !settingsOpen) return;
     let stopped = false; let timer: number | undefined;
     const poll = async () => {
       try {
-        await refreshModelProviders();
+        if (document.visibilityState !== "hidden" && navigator.onLine) await refreshModelProviders();
         if (stopped) return;
       } catch { /* keep polling while Settings remains open */ }
       if (!stopped) timer = window.setTimeout(() => void poll(), 2_000);
     };
     void poll();
     return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [providerPolling, refreshModelProviders, settingsOpen]);
+  }, [signedIn, refreshModelProviders, settingsOpen]);
   function handleAgentAction(agent: Agent, action: AgentAction) {
     if (action === "edit") setEditingAgent(agent);
     if (action === "delete") setDeletingAgent(agent);
   }
   const dismissError = () => { crew.dismissError(); setAuthError(undefined); };
-  const startModelProviderPolling = () => { dismissError(); setProviderPolling(true); };
   async function createDefaultAgent() {
     if (creatingAgentName) return;
     const name = nextAgentName(crew.agents.map((agent) => agent.name));
@@ -155,7 +154,6 @@ export function App() {
       const settings = await window.runtaCrew?.settings.get();
       const provider = crew.modelProviders.find((item) => item.id === settings?.modelProviderId);
       if (!provider) {
-        setAuthError("Select a model provider before creating an agent.");
         setSettingsOpen(true);
         return;
       }
@@ -185,7 +183,7 @@ export function App() {
     <ErrorToast message={crew.error || authError} onDismiss={dismissError} />
     {editingAgent && <EditAgentDialog agent={editingAgent} onClose={() => setEditingAgent(undefined)} onSave={(input) => crew.updateAgent(editingAgent.id, input)} />}
     {deletingAgent && <DeleteAgentDialog agent={deletingAgent} onClose={() => setDeletingAgent(undefined)} onDelete={() => crew.deleteAgent(deletingAgent.id)} />}
-    {settingsOpen && <SettingsDialog providers={crew.modelProviders} organizationId={crew.organizationId} accountName={userName} accountEmail={userEmail} onModelProviderOpen={startModelProviderPolling} onLogout={() => { setProviderPolling(false); setSettingsOpen(false); void logout(); }} onClose={() => { setProviderPolling(false); setSettingsOpen(false); }} />}
+    {settingsOpen && <SettingsDialog providers={crew.modelProviders} organizationId={crew.organizationId} accountName={userName} accountEmail={userEmail} onModelProviderOpen={dismissError} onLogout={() => { setSettingsOpen(false); void logout(); }} onClose={() => { setSettingsOpen(false); }} />}
     <CommandPalette open={paletteOpen} agents={crew.agents} onClose={() => setPaletteOpen(false)} onSelectAgent={crew.setSelectedAgentId} onCreateAgent={() => void createDefaultAgent()} onSettings={() => setSettingsOpen(true)} onComputer={() => setDetailsOpen(true)} />
   </div>;
 }

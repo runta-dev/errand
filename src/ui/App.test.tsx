@@ -10,6 +10,32 @@ import { SettingsDialog } from "./components/Dialogs";
 import type { AppSettings, DesktopBridge } from "@/shared/desktop";
 
 describe("Errand authentication surfaces", () => {
+  it("refreshes an open provider picker even when creation started outside Errand", async () => {
+    const user = userEvent.setup();
+    let connected = false;
+    const openExternal = vi.fn();
+    window.runtaCrew = {
+      openExternal,
+      settings: { get: async () => ({ endpoint: "https://api.forge", dashboardUrl: "https://app.forge", theme: "light", notifications: true }), set: async (settings: AppSettings) => settings },
+      credentials: { has: async () => true },
+      cloud: { request: async ({ path }: { path: string }) => ({ status: 200, body: path === "/v2/me" ? { data: { display_name: "Tester" } } : path === "/v2/model-providers" ? { organization_id: "org-test", model_providers: connected ? [{ id: "codex-1", display_name: "Codex subscription", protocol: "openai_responses", base_url: "https://chatgpt.com/backend-api/codex" }] : [] } : { agents: [] } }) },
+      notifications: { setBadge: async () => undefined },
+      deepLinks: { onOpenAgent: () => () => undefined },
+    } as unknown as DesktopBridge;
+    const view = render(<App />);
+    try {
+      await user.click(await screen.findByRole("button", { name: "New agent" }));
+      expect(await screen.findByRole("button", { name: "Add model provider" })).toBeInTheDocument();
+      connected = true;
+      await user.click(await screen.findByRole("button", { name: "Model provider" }, { timeout: 4000 }));
+      expect(screen.getByRole("option", { name: "Codex subscription" })).toBeInTheDocument();
+      expect(openExternal).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      delete window.runtaCrew;
+    }
+  });
+
   it("opens the dashboard add-provider page when no providers exist", async () => {
     const openExternal = vi.fn(async () => undefined); const user = userEvent.setup();
     window.runtaCrew = {
