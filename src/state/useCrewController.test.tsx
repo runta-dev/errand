@@ -19,6 +19,16 @@ describe("useCrewController", () => {
     expect(listModelProviders).toHaveBeenCalledTimes(2);
   });
 
+  it("discovers subscriptions added in the browser when the app regains focus", async () => {
+    let providers: Awaited<ReturnType<CloudAgentsClient["listModelProviders"]>>["providers"] = [];
+    const client = { listModelProviders: async () => ({ organizationId: "org-test", providers }), listAgents: async () => [] } as unknown as CloudAgentsClient;
+    const { result } = renderHook(() => useCrewController(client));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    providers = [{ id: "codex-1", name: "Codex subscription", protocol: "openai_responses" }];
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await waitFor(() => expect(result.current.modelProviders).toEqual(providers));
+  });
+
   it("does not start Cloud Agents requests until authentication is enabled", async () => {
     const listAgents = vi.fn(); const listModelProviders = vi.fn();
     const client = { listAgents, listModelProviders } as unknown as CloudAgentsClient;
