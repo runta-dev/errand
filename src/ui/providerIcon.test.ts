@@ -7,4 +7,6 @@ it("identifies the endpoint rather than the editable display name or wire protoc
   expect(providerIconId({ ...provider, name: "Team model", baseUrl: "https://api.openai.com/v1/" })).toBe("openai");
   expect(providerIconId({ ...provider, baseUrl: "https://proxy.example/v1" })).toBe("compatible");
   expect(providerIconId(provider)).toBe("compatible");
+  expect(providerIconId({ ...provider, baseUrl: "https://chatgpt.com/backend-api/codex" })).toBe("codex_oauth");
+  expect(providerIconId({ ...provider, baseUrl: "https://chatgpt.com.evil.example/backend-api/codex" })).toBe("compatible");
 });

@@ -4,6 +4,7 @@ import type { ModelProviderOption } from "@/domain/types";
 export function providerIconId(provider: ModelProviderOption): string {
   if (!provider.baseUrl) return "compatible";
   const endpoint = provider.baseUrl.replace(/\/+$/, "");
+  if (endpoint === "https://chatgpt.com/backend-api/codex" && provider.protocol === "openai_responses") return "codex_oauth";
   if (endpoint === "https://api.openai.com/v1" && ["openai_chat", "openai_responses"].includes(provider.protocol)) return "openai";
   if (endpoint === "https://api.anthropic.com" && provider.protocol === "anthropic_messages") return "anthropic";
   if (endpoint === "https://api.moonshot.ai/v1" && ["openai_chat", "openai_responses"].includes(provider.protocol)) return "kimi";
