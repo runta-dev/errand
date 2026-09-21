@@ -246,21 +246,23 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
       let sawAssistant = false;
       let settled = false;
       let unsubscribe: () => void = () => undefined;
+      const toolActivities = new Map<string, ActivityEvent>();
+      const withActivities = (messages: Message[]): Message[] => toolActivities.size === 0 ? messages : messages.map((message) => message.role === "agent" ? { ...message, activities: [...toolActivities.values()] } : message);
       const finish = (incomplete = false) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeout);
         signal?.removeEventListener("abort", aborted);
         unsubscribe();
-        if (run.status === "finished" && run.result?.trim() && (incomplete || replyError)) { resolve(fallback); return; }
-        if (replyError) { resolve(runMessages(run, id, replyError)); return; }
-        if (!sawAssistant) { resolve(fallback); return; }
+        if (run.status === "finished" && run.result?.trim() && (incomplete || replyError)) { resolve(withActivities(fallback)); return; }
+        if (replyError) { resolve(withActivities(runMessages(run, id, replyError))); return; }
+        if (!sawAssistant) { resolve(withActivities(fallback)); return; }
         const recoveredReply = current?.parts.some((part) => part.type === "text" && part.text.trim());
-        resolve([
+        resolve(withActivities([
           ...fallback.filter((message) => message.role === "user"),
           ...(current ? [current] : []),
           ...fallback.filter((message) => message.role === "system" && !(recoveredReply && run.status === "finished" && !run.error?.trim())),
-        ]);
+        ]));
       };
       const aborted = () => finish(true);
       const timeout = window.setTimeout(() => finish(true), 10_000);
@@ -281,8 +283,11 @@ export class RuntaCloudAgentsClient implements CloudAgentsClient {
         if (failure) { replyError = failure; current = undefined; }
         else if (assistantSucceeded(event)) replyError = undefined;
         if (event.event === "pi.event" && event.data && typeof event.data === "object") {
-          const payload = event.data as { type?: string };
-          if (payload.type === "tool_execution_start") { current = undefined; return; }
+          const update = event.data as Record<string, unknown>;
+          const activityId = stringValue(update.toolCallId);
+          const activity = activityFromPiEvent(update, id, activityId ? toolActivities.get(`tool:${activityId}`) : undefined);
+          if (activity) toolActivities.set(activity.id, activity);
+          if (update.type === "tool_execution_start") { current = undefined; return; }
         }
         const chunk = assistantChunk(event);
         if (!chunk) return;

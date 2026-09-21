@@ -470,4 +470,28 @@ describe("RuntaCloudAgentsClient", () => {
     expect(JSON.stringify(result.messages)).not.toContain("Checking.");
     expect(JSON.stringify(result.messages)).not.toContain("giant aggregate");
   });
+
+  it("replays historical tool activity onto the completed agent message", async () => {
+    const request = vi.fn(async ({ path }: CloudRequest) => ({ status: 200, body: path.includes("/artifacts?") ? [] : [
+      { id: "run-plain", agent_id: "agent-1", status: "finished", prompt: "Just reply", result: "No tools used", error: null, created_at: "2026-08-26T02:00:00Z", updated_at: "2026-08-26T02:00:01Z" },
+      { id: "run-tools", agent_id: "agent-1", status: "finished", prompt: "Trace it", result: "All done", error: null, created_at: "2026-08-26T01:00:00Z", updated_at: "2026-08-26T01:00:01Z" },
+    ] }));
+    const subscribe = vi.fn((path: string, listener: (event: CloudStreamEvent) => void) => {
+      queueMicrotask(() => {
+        if (path.includes("run-tools")) {
+          listener({ event: "pi.event", id: "1", data: { type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" } } });
+          listener({ event: "pi.event", id: "2", data: { type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", args: { path: "README.md" }, result: { content: [{ type: "text", text: "README contents" }] }, isError: false } });
+          listener({ event: "pi.event", id: "3", data: { type: "message_update", message: { id: "assistant-1" }, assistantMessageEvent: { type: "text_delta", delta: "All done" } } });
+        }
+        listener({ event: "stream.closed" });
+      });
+      return () => undefined;
+    });
+    window.runtaCrew = { cloud: { request, subscribe } } as unknown as DesktopBridge;
+
+    const { messages } = await new RuntaCloudAgentsClient().getConversation("conversation-agent-1");
+
+    expect(messages.find((message) => message.id.startsWith("run-tools:agent"))).toMatchObject({ role: "agent", parts: [{ type: "text", text: "All done" }], activities: [expect.objectContaining({ id: "tool:tool-1", kind: "file", title: "read README.md", output: "README contents", status: "completed" })] });
+    expect(messages.find((message) => message.id.startsWith("run-plain:agent"))?.activities).toBeUndefined();
+  });
 });

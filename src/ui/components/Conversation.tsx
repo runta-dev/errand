@@ -23,10 +23,18 @@ function openExternalLink(event: MouseEvent<HTMLDivElement>) {
     void window.runtaCrew?.openExternal(url.toString());
   } catch { /* Ignore malformed Agent output instead of navigating the webview. */ }
 }
+function ActivityToolList({ activities }: { activities: ActivityEvent[] }) {
+  return <div className="agent-working-tools">{activities.map((activity) => { const Icon = activityIcon[activity.kind]; return <details className={`agent-tool-detail ${activity.status}`} key={activity.id}><summary><Icon size={14} /><span>{activity.title}</span><ChevronRight size={13} /></summary><div>{activity.output ?? (activity.status === "running" ? "Waiting for result…" : "No output")}</div></details>; })}</div>;
+}
 function WorkingActivity({ agent, label, activities, startedAt }: { agent?: Pick<Agent, "id" | "name">; label: string; activities: ActivityEvent[]; startedAt: string }) {
   const [now, setNow] = useState(0); const [open, setOpen] = useState(false);
   useEffect(() => { setNow(Date.now()); const timer = window.setInterval(() => setNow(Date.now()), 1_000); return () => window.clearInterval(timer); }, []);
-  return <details className="agent-working-details" open={open}><summary role="status" aria-label={`${agent?.name ?? "Agent"} is working: ${label}`} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}><span className="agent-working-progress">Working for {elapsedLabel(now - Date.parse(startedAt))}</span><ChevronRight className="agent-working-chevron" size={15} /></summary>{activities.length > 0 && <div className="agent-working-tools">{activities.map((activity) => { const Icon = activityIcon[activity.kind]; return <details className={`agent-tool-detail ${activity.status}`} key={activity.id}><summary><Icon size={14} /><span>{activity.title}</span><ChevronRight size={13} /></summary><div>{activity.output ?? (activity.status === "running" ? "Waiting for result…" : "No output")}</div></details>; })}</div>}</details>;
+  return <details className="agent-working-details" open={open}><summary role="status" aria-label={`${agent?.name ?? "Agent"} is working: ${label}`} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}><span className="agent-working-progress">Working for {elapsedLabel(now - Date.parse(startedAt))}</span><ChevronRight className="agent-working-chevron" size={15} /></summary>{activities.length > 0 && <ActivityToolList activities={activities} />}</details>;
+}
+function CompletedActivity({ agent, activities }: { agent?: Pick<Agent, "id" | "name">; activities: ActivityEvent[] }) {
+  const [open, setOpen] = useState(false);
+  const label = `${activities.length} ${activities.length === 1 ? "step" : "steps"}`;
+  return <details className="agent-working-details agent-worked-details" open={open}><summary aria-label={`${agent?.name ?? "Agent"} worked: ${label}`} onClick={(event) => { event.preventDefault(); setOpen((value) => !value); }}><span className="agent-working-progress">Worked · {label}</span><ChevronRight className="agent-working-chevron" size={15} /></summary><ActivityToolList activities={activities} /></details>;
 }
 export function MessageView({ message, agent, activities, entering = false }: { message: Message; agent?: Pick<Agent, "id" | "name">; activities: ActivityEvent[]; entering?: boolean }) {
   const text = textOf(message);
@@ -36,6 +44,7 @@ export function MessageView({ message, agent, activities, entering = false }: { 
   const latestActivity = conversationActivities.at(-1);
   const activeActivity = [...conversationActivities].reverse().find((activity) => activity.status === "running") ?? latestActivity;
   const agentWorking = message.role === "agent" && Boolean(message.streaming);
+  const settledActivities = message.role === "agent" && !message.streaming ? message.activities ?? [] : [];
   const workingLabel = text.trim() || activeActivity?.title || "Working";
   const attachments = message.parts.flatMap((part) => part.type === "attachment" ? [part.attachment] : []);
   useLayoutEffect(() => {
@@ -49,6 +58,7 @@ export function MessageView({ message, agent, activities, entering = false }: { 
   return <div className={`message ${message.role} ${entering ? "message-entering" : ""}`} ref={rootRef}>
     {message.interrupted && <div className="agent-interrupted">Interrupted</div>}
     {message.role === "user" && attachments.length > 0 && <div className="message-attachments"><AttachmentCards attachments={attachments} /></div>}
+    {settledActivities.length > 0 && <CompletedActivity agent={agent} activities={settledActivities} />}
     {!agentWorking && (text || message.streaming) && <div className="message-body" onClick={message.role === "agent" ? openExternalLink : undefined}>{message.role === "agent" ? <Suspense fallback={<span className="agent-markdown-fallback">{text}</span>}><Streamdown className="agent-markdown" mode={message.streaming ? "streaming" : "static"} parseIncompleteMarkdown={message.streaming} animated={message.streaming} controls={{ code: { copy: true, download: false }, table: false, image: false }} tableMaxHeight="none" linkSafety={{ enabled: false }} skipHtml>{text}</Streamdown></Suspense> : text}</div>}
     {agentWorking && <WorkingActivity agent={agent} label={workingLabel} activities={conversationActivities} startedAt={message.createdAt} />}
     {message.role !== "user" && attachments.length > 0 && <div className="message-attachments"><AttachmentCards attachments={attachments} /></div>}
