@@ -223,6 +223,31 @@ describe("Conversation states", () => {
     expect(summary.closest("details")).toHaveAttribute("open");
   });
 
+  it("keeps the tool trace visible as a collapsed summary after the run completes", async () => {
+    const message: Message = { id: "run-done:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "All wrapped up" }], createdAt: new Date().toISOString(), streaming: false, activities: [
+      { id: "tool:install", conversationId: "conversation-atlas", kind: "terminal", title: "apt-get install chromium", detail: "apt-get install chromium", output: "Chromium installed", status: "completed", createdAt: new Date(0).toISOString() },
+      { id: "tool:read", conversationId: "conversation-atlas", kind: "file", title: "read README.md", detail: "read README.md", status: "completed", createdAt: new Date(0).toISOString() },
+    ] };
+    render(<MessageView message={message} activities={[]} />);
+
+    expect(await screen.findByText("All wrapped up")).toBeInTheDocument();
+    const summary = screen.getByText("Worked · 2 steps");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByText(/Working for/)).not.toBeInTheDocument();
+    fireEvent.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("apt-get install chromium")).toBeInTheDocument();
+    expect(screen.getByText("Chromium installed")).toBeInTheDocument();
+  });
+
+  it("renders no trace summary for a completed run without tool activity", async () => {
+    const message: Message = { id: "run-quiet:agent", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "text", text: "Quick answer" }], createdAt: new Date().toISOString(), streaming: false };
+    render(<MessageView message={message} activities={[]} />);
+
+    expect(await screen.findByText("Quick answer")).toBeInTheDocument();
+    expect(screen.queryByText(/Worked ·/)).not.toBeInTheDocument();
+  });
+
   it("opens a safe text attachment preview", async () => {
     window.runtaCrew = { attachments: { choose: async () => [], read: async () => ({ name: "report.txt", mediaType: "text/plain", base64: btoa("hello preview") }) } } as unknown as typeof window.runtaCrew;
     const message: Message = { id: "artifact-message", conversationId: "conversation-atlas", role: "agent", parts: [{ type: "attachment", attachment: { id: "file-1", name: "report.txt", size: 13, mediaType: "text/plain", source: "local-selection" } }], createdAt: new Date().toISOString() };

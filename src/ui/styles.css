@@ -112,6 +112,7 @@ button:not(:disabled):hover,a[href]:hover,summary:hover,[role="button"]:hover{ba
 @media (max-width:1030px) and (min-width:761px){.app-shell.details-open{grid-template-columns:238px minmax(0,1fr) min(var(--detail-panel-width,340px),340px)}.detail-panel{position:relative;width:min(var(--detail-panel-width,340px),340px)}}
 .agent-working-details>summary:hover{background:transparent!important}
 .agent-tool-detail>summary:hover{background:transparent!important;color:var(--muted)!important}
+.agent-worked-details>summary .agent-working-progress{background:none;animation:none;color:var(--muted)}
 @keyframes message-enter-unified{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
 .message-entering.user,.message-entering.agent,.message-entering.system{animation:message-enter-unified .28s cubic-bezier(.22,1,.36,1) both}.message-entering.user .message-body{animation:none;transform:none}
 @media (prefers-reduced-motion:reduce){.message-entering.user,.message-entering.agent,.message-entering.system{animation:none;opacity:1;transform:none}}
