@@ -40,6 +40,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electron/get": "^5.1.0",
     "@eslint/js": "^9.39.1",
     "@resvg/resvg-js": "2.6.2",
     "@testing-library/jest-dom": "^6.9.1",
@@ -56,6 +57,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "extract-zip": "^2.0.1",
     "globals": "^16.5.0",
     "js-yaml": "4.3.1",
     "jsdom": "^26.1.0",
