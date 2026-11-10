@@ -25,31 +25,31 @@ jobs:
     environment: apple-release
     timeout-minutes: 90
     steps:
-      - name: Resolve trusted Fennec source
-        id: source
+      - name: Validate requested source
         env:
-          GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="${SOURCE_SHA:-$(gh api repos/runta-dev/fennec/commits/main --jq .sha)}"
-          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
-          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
       - uses: actions/checkout@v4
         with:
           repository: runta-dev/fennec
-          ref: ${{ steps.source.outputs.sha }}
+          ref: ${{ inputs.source_sha || 'main' }}
+          ssh-key: ${{ secrets.FENNEC_SOURCE_DEPLOY_KEY }}
           fetch-depth: 0
           persist-credentials: false
       - name: Verify source belongs to Fennec main
+        id: source
         env:
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -eu
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          source_sha=$(git rev-parse HEAD)
+          if [ -n "$SOURCE_SHA" ]; then test "$source_sha" = "$SOURCE_SHA"; fi
           git merge-base --is-ancestor HEAD origin/main
           test -x scripts/package-release-macos.sh
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
