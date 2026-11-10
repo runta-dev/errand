@@ -1,0 +1,82 @@
+name: Build Fennec macOS Release
+on:
+  push:
+    branches: [feat/fennec-release-ci]
+    paths: [.github/workflows/fennec-release.yml]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Fennec main commit to package (empty uses current main)
+        required: false
+        type: string
+      version:
+        description: Fennec version (empty uses Singapore build timestamp)
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fennec-apple-release
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Sign and notarize Fennec arm64
+    runs-on: macos-15
+    environment: apple-release
+    timeout-minutes: 90
+    steps:
+      - name: Validate requested source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: runta-dev/fennec
+          ref: ${{ inputs.source_sha || 'main' }}
+          ssh-key: ${{ secrets.FENNEC_SOURCE_DEPLOY_KEY }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source belongs to Fennec main
+        id: source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -eu
+          source_sha=$(git rev-parse HEAD)
+          if [ -n "$SOURCE_SHA" ]; then test "$source_sha" = "$SOURCE_SHA"; fi
+          git merge-base --is-ancestor HEAD origin/main
+          test -x scripts/package-release-macos.sh
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify source
+        run: |
+          make check
+          make check-ui
+          go test ./internal/account ./internal/control ./internal/controlplane ./internal/terminalinput ./internal/terminalnotice ./internal/sessionid ./internal/terminalstream
+      - name: Sign, notarize, staple, and verify Fennec
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+          FENNEC_VERSION: ${{ inputs.version }}
+          FENNEC_BUILD_NUMBER: ${{ github.run_number }}
+        run: ./scripts/package-release-macos.sh
+      - name: Upload verified Fennec artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fennec-macos-arm64-${{ steps.source.outputs.sha }}
+          path: release/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
