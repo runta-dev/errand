@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: runta-dev/fennec
           ref: ${{ inputs.source_sha || 'main' }}
@@ -50,11 +50,11 @@ jobs:
           git merge-base --is-ancestor HEAD origin/main
           test -x scripts/package-release-macos.sh
           echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - name: Verify source
@@ -68,7 +68,7 @@ jobs:
       # key follows the packager's own cache key (cua-package, chromium and
       # credits sources); the downloads and generated notices ride along.
       - name: Restore signed Chromium
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/Library/Caches/fennec/release-cua-cache
@@ -85,7 +85,7 @@ jobs:
           FENNEC_BUILD_NUMBER: ${{ github.run_number }}
         run: ./scripts/package-release-macos.sh
       - name: Upload verified Fennec artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fennec-macos-arm64-${{ steps.source.outputs.sha }}
           path: release/*
