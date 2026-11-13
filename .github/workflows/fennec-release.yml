@@ -62,6 +62,18 @@ jobs:
           make check
           make check-ui
           go test ./internal/account ./internal/control ./internal/controlplane ./internal/terminalinput ./internal/terminalnotice ./internal/sessionid ./internal/terminalstream
+      # Fennec bundles a signed Chromium. Re-signing it changes its tree digest,
+      # and then every auto-update downloads it again; keeping the signed copy
+      # between runs lets updates reuse the Chromium users already have. The
+      # key follows the packager's own cache key (cua-package, chromium and
+      # credits sources); the downloads and generated notices ride along.
+      - name: Restore signed Chromium
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/fennec/release-cua-cache
+            ~/Library/Caches/fennec/cua
+          key: fennec-cua-arm64-${{ hashFiles('cua/cmd/cua-package/*.go', 'cua/internal/chromium/*.go', 'cua/internal/credits/*.go') }}
       - name: Sign, notarize, staple, and verify Fennec
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
