@@ -1,0 +1,84 @@
+name: Build FennecCUA macOS Release
+# Signs and notarizes the standalone FennecCUA archives from a Fennec main
+# commit and uploads them as an artifact. runta-dev/fennec's "Publish
+# FennecCUA release" workflow publishes them, given this run's id.
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Fennec main commit to package (empty uses current main)
+        required: false
+        type: string
+      version:
+        description: FennecCUA version N.N.N (empty uses 0.1.<Singapore build timestamp>)
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fennec-apple-release
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Sign and notarize FennecCUA arm64
+    runs-on: macos-15
+    environment: apple-release
+    timeout-minutes: 90
+    steps:
+      - name: Validate inputs
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
+          [[ -z "$VERSION" || "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected a version N.N.N'; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: runta-dev/fennec
+          ref: ${{ inputs.source_sha || 'main' }}
+          ssh-key: ${{ secrets.FENNEC_SOURCE_DEPLOY_KEY }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source belongs to Fennec main
+        id: source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -eu
+          source_sha=$(git rev-parse HEAD)
+          if [ -n "$SOURCE_SHA" ]; then test "$source_sha" = "$SOURCE_SHA"; fi
+          git merge-base --is-ancestor HEAD origin/main
+          test -x scripts/package-cua-release-macos.sh
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: cua/go.mod
+          cache: true
+          cache-dependency-path: cua/go.sum
+      - name: Verify source
+        working-directory: cua
+        run: |
+          go vet ./...
+          go test ./...
+      - name: Sign, notarize, staple, and verify FennecCUA
+        id: package
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+          FENNEC_CUA_VERSION: ${{ inputs.version }}
+        run: |
+          ./scripts/package-cua-release-macos.sh
+          echo "version=$(jq -r .version release-cua/provenance.json)" >> "$GITHUB_OUTPUT"
+      - name: Upload verified FennecCUA artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fennec-cua-macos-arm64-${{ steps.package.outputs.version }}
+          path: release-cua/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
