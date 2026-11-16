@@ -1,7 +1,7 @@
-name: Build FennecCUA macOS Release
-# Signs and notarizes the standalone FennecCUA archives from a Fennec main
+name: Build Fennec Computer Use macOS Release
+# Signs and notarizes the standalone Fennec Computer Use disk image and archives from a Fennec main
 # commit and uploads them as an artifact. runta-dev/fennec's "Publish
-# FennecCUA release" workflow publishes them, given this run's id.
+# Fennec Computer Use release" workflow publishes them, given this run's id.
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,7 @@ on:
         required: false
         type: string
       version:
-        description: FennecCUA version N.N.N (empty uses 0.1.<Singapore build timestamp>)
+        description: Fennec Computer Use version N.N.N (empty uses 0.1.<Singapore build timestamp>)
         required: false
         type: string
 permissions:
@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    name: Sign and notarize FennecCUA arm64
+    name: Sign and notarize Fennec Computer Use arm64
     runs-on: macos-15
     environment: apple-release
     timeout-minutes: 90
@@ -62,7 +62,7 @@ jobs:
         run: |
           go vet ./...
           go test ./...
-      - name: Sign, notarize, staple, and verify FennecCUA
+      - name: Sign, notarize, staple, and verify Fennec Computer Use
         id: package
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -74,7 +74,7 @@ jobs:
         run: |
           ./scripts/package-cua-release-macos.sh
           echo "version=$(jq -r .version release-cua/provenance.json)" >> "$GITHUB_OUTPUT"
-      - name: Upload verified FennecCUA artifacts
+      - name: Upload verified Fennec Computer Use artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fennec-cua-macos-arm64-${{ steps.package.outputs.version }}
