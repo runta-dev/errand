@@ -64,6 +64,7 @@ jobs:
           go test ./internal/account ./internal/control ./internal/controlplane ./internal/terminalinput ./internal/terminalnotice ./internal/sessionid ./internal/terminalstream
       - name: Sign, notarize, staple, and verify Fennec
         env:
+          GH_TOKEN: ${{ github.token }}
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
