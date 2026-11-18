@@ -13,6 +13,10 @@ on:
         description: Marketing version (empty uses ios/project.yml)
         required: false
         type: string
+      build_number:
+        description: Build number (empty uses the run number); must exceed every earlier upload, including ones not made by this workflow
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -41,9 +45,11 @@ jobs:
       - name: Validate requested source
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ -z "$BUILD_NUMBER" || "$BUILD_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]] || { echo '::error::Expected a positive integer build number'; exit 1; }
           [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -82,5 +88,5 @@ jobs:
       - name: Archive, sign and upload to TestFlight
         env:
           FENNEC_IOS_VERSION: ${{ inputs.version }}
-          FENNEC_BUILD_NUMBER: ${{ github.run_number }}
+          FENNEC_BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
         run: ./scripts/package-testflight-ios.sh
