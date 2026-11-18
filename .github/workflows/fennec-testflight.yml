@@ -1,0 +1,80 @@
+name: Build Fennec for iPhone TestFlight
+on:
+  push:
+    branches: [feat/fennec-testflight-ci]
+    paths: [.github/workflows/fennec-testflight.yml]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Fennec main commit to build (empty uses current main)
+        required: false
+        type: string
+      version:
+        description: Marketing version (empty uses ios/project.yml)
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fennec-ios-testflight
+  cancel-in-progress: false
+jobs:
+  testflight:
+    name: Archive and upload Fennec for iPhone
+    runs-on: macos-26
+    environment: apple-release
+    timeout-minutes: 90
+    env:
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+      # A dedicated key if one is set; otherwise the notarization key, which
+      # is also an App Store Connect API key.
+      APPLE_ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 || secrets.APPLE_NOTARY_KEY_BASE64 }}
+      APPLE_ASC_KEY_ID: ${{ vars.APPLE_ASC_KEY_ID || secrets.APPLE_ASC_KEY_ID || vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_ASC_ISSUER_ID: ${{ vars.APPLE_ASC_ISSUER_ID || secrets.APPLE_ASC_ISSUER_ID || vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+      # Manual signing, when set; otherwise Xcode signs with the API key.
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+    steps:
+      - name: Validate requested source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -z "$SOURCE_SHA" || "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Expected a full Fennec commit SHA'; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: runta-dev/fennec
+          ref: ${{ inputs.source_sha || 'main' }}
+          ssh-key: ${{ secrets.FENNEC_SOURCE_DEPLOY_KEY }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source belongs to Fennec main
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -eu
+          source_sha=$(git rev-parse HEAD)
+          if [ -n "$SOURCE_SHA" ]; then test "$source_sha" = "$SOURCE_SHA"; fi
+          git merge-base --is-ancestor HEAD origin/main
+          test -x scripts/package-testflight-ios.sh
+      - name: Select the newest Xcode
+        run: |
+          set -eu
+          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check prerequisites
+        run: ./scripts/package-testflight-ios.sh --check
+      - name: Test the shared client
+        run: go test ./mobile ./internal/transcript
+      - name: Archive, sign and upload to TestFlight
+        env:
+          FENNEC_IOS_VERSION: ${{ inputs.version }}
+          FENNEC_BUILD_NUMBER: ${{ github.run_number }}
+        run: ./scripts/package-testflight-ios.sh
