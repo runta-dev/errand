@@ -21,7 +21,9 @@ concurrency:
 jobs:
   testflight:
     name: Archive and upload Fennec for iPhone
-    runs-on: macos-26
+    # App Store Connect requires the iOS 27 SDK from April 2027 (warning
+    # 90725); the regular macOS images stop at Xcode 26.
+    runs-on: xcode-27
     environment: apple-release
     timeout-minutes: 90
     env:
@@ -59,12 +61,16 @@ jobs:
           if [ -n "$SOURCE_SHA" ]; then test "$source_sha" = "$SOURCE_SHA"; fi
           git merge-base --is-ancestor HEAD origin/main
           test -x scripts/package-testflight-ios.sh
-      - name: Select the newest Xcode
+      # The image's default Xcode is its released one; newer installs may be
+      # betas, whose builds App Store Connect rejects.
+      - name: Select the default Xcode 27
         run: |
           set -eu
-          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)
-          sudo xcode-select -s "$newest"
+          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
+          sdk=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "iOS SDK $sdk"
+          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::Expected the iOS 27 SDK or later, found $sdk"; exit 1; }
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
