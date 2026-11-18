@@ -26,11 +26,11 @@ jobs:
     timeout-minutes: 90
     env:
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
-      # A dedicated key if one is set; otherwise the notarization key, which
-      # is also an App Store Connect API key.
-      APPLE_ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 || secrets.APPLE_NOTARY_KEY_BASE64 }}
-      APPLE_ASC_KEY_ID: ${{ vars.APPLE_ASC_KEY_ID || secrets.APPLE_ASC_KEY_ID || vars.APPLE_NOTARY_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
-      APPLE_ASC_ISSUER_ID: ${{ vars.APPLE_ASC_ISSUER_ID || secrets.APPLE_ASC_ISSUER_ID || vars.APPLE_NOTARY_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+      # The App Store Connect API key dedicated to TestFlight (AuthKey_<id>.p8,
+      # base64), separate from the notarization key.
+      APPLE_ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 }}
+      APPLE_ASC_KEY_ID: ${{ vars.APPLE_ASC_KEY_ID }}
+      APPLE_ASC_ISSUER_ID: ${{ vars.APPLE_ASC_ISSUER_ID }}
       # Manual signing, when set; otherwise Xcode signs with the API key.
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
       IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
