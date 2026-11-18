@@ -65,8 +65,19 @@ export function MessageView({ message, agent, activities, entering = false }: { 
     {relevant.map((activity) => { const Icon = activityIcon[activity.kind]; return <div className="activity-card" key={activity.id}><div className="activity-summary"><span className={`activity-icon ${activity.status}`}><Icon size={15} /></span><div><strong>{activity.title}</strong><span>{activity.detail}</span></div><span className={`activity-state ${activity.status}`}>{activity.status === "running" ? <LoaderCircle className="spin" size={15} /> : "Done"}</span></div></div>; })}
   </div>;
 }
+type ComposerDraft = {
+  text: string;
+  attachments: Attachment[];
+  sending: boolean;
+};
+
+const emptyComposerDraft: ComposerDraft = { text: "", attachments: [], sending: false };
+
 export function Conversation({ agent, messages, activities, loading = false, focusRequest = 0, onSend, onToggleDetails }: { agent: Agent; messages: Message[]; activities: ActivityEvent[]; loading?: boolean; focusRequest?: number; onSend(text: string, attachments?: Attachment[]): Promise<void>; onToggleDetails(): void }) {
-  const [draft, setDraft] = useState(""); const [attachments, setAttachments] = useState<Attachment[]>([]); const [sending, setSending] = useState(false); const [isScrolled, setIsScrolled] = useState(false); const [showScrollToBottom, setShowScrollToBottom] = useState(false); const [scrollbarVisible, setScrollbarVisible] = useState(false); const scrollRef = useRef<HTMLDivElement>(null); const contentRef = useRef<HTMLDivElement>(null); const composerRef = useRef<HTMLTextAreaElement>(null); const sendingRef = useRef(false); const pinnedToBottomRef = useRef(true); const programmaticScrollRef = useRef(false); const suppressScrollbarUntilRef = useRef(0); const lastScrollTopRef = useRef(0); const programmaticScrollTimer = useRef<number | undefined>(undefined); const scrollHideTimer = useRef<number | undefined>(undefined);
+  const [composerDrafts, setComposerDrafts] = useState(() => new Map<string, ComposerDraft>());
+  const { text: draft, attachments, sending } = composerDrafts.get(agent.id) ?? emptyComposerDraft;
+  const sendingAgents = useRef(new Set<string>());
+  const [isScrolled, setIsScrolled] = useState(false); const [showScrollToBottom, setShowScrollToBottom] = useState(false); const [scrollbarVisible, setScrollbarVisible] = useState(false); const scrollRef = useRef<HTMLDivElement>(null); const contentRef = useRef<HTMLDivElement>(null); const composerRef = useRef<HTMLTextAreaElement>(null); const pinnedToBottomRef = useRef(true); const programmaticScrollRef = useRef(false); const suppressScrollbarUntilRef = useRef(0); const lastScrollTopRef = useRef(0); const programmaticScrollTimer = useRef<number | undefined>(undefined); const scrollHideTimer = useRef<number | undefined>(undefined);
   const knownMessageIds = useRef(new Set<string>()); const knownAgentId = useRef(agent.id); const wasLoading = useRef(loading); const [enteringMessageIds, setEnteringMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   useLayoutEffect(() => {
     const reset = knownAgentId.current !== agent.id || wasLoading.current;
@@ -96,8 +107,51 @@ export function Conversation({ agent, messages, activities, loading = false, foc
   useEffect(() => () => { if (scrollHideTimer.current) window.clearTimeout(scrollHideTimer.current); if (programmaticScrollTimer.current) window.clearTimeout(programmaticScrollTimer.current); }, []);
   useEffect(() => { if (focusRequest > 0) composerRef.current?.focus(); }, [agent.id, focusRequest]);
   function revealScrollbarBriefly() { if (programmaticScrollRef.current || Date.now() < suppressScrollbarUntilRef.current) return; setScrollbarVisible(true); if (scrollHideTimer.current) window.clearTimeout(scrollHideTimer.current); scrollHideTimer.current = window.setTimeout(() => { scrollHideTimer.current = undefined; setScrollbarVisible(false); }, 700); }
-  async function submit(event: FormEvent) { event.preventDefault(); const text = draft.trim(); if ((!text && attachments.length === 0) || sendingRef.current) return; const submittedAttachments = attachments; sendingRef.current = true; setDraft(""); setAttachments([]); setSending(true); try { await onSend(text, submittedAttachments); } finally { sendingRef.current = false; setSending(false); } }
-  async function chooseAttachments() { const selected = await window.runtaCrew?.attachments.choose() ?? []; setAttachments((current) => [...current, ...selected.filter((next) => !current.some((item) => item.id === next.id)).map((item) => ({ ...item, source: "local-selection" as const }))].slice(0, 8)); }
+  // Draft helpers keep asynchronous results tied to the agent that started the action.
+  function updateComposerDraft(update: (current: ComposerDraft) => ComposerDraft) {
+    setComposerDrafts((current) => {
+      const next = update(current.get(agent.id) ?? emptyComposerDraft);
+      const drafts = new Map(current);
+      if (next.text || next.attachments.length || next.sending) {
+        drafts.set(agent.id, next);
+      } else {
+        drafts.delete(agent.id);
+      }
+      return drafts;
+    });
+  }
+
+  function setAttachments(update: (current: Attachment[]) => Attachment[]) {
+    updateComposerDraft((current) => ({ ...current, attachments: update(current.attachments) }));
+  }
+  // End draft helpers.
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const text = draft.trim();
+    if ((!text && attachments.length === 0) || sendingAgents.current.has(agent.id)) return;
+
+    sendingAgents.current.add(agent.id);
+    updateComposerDraft(() => ({ ...emptyComposerDraft, sending: true }));
+    try {
+      await onSend(text, attachments);
+    } finally {
+      sendingAgents.current.delete(agent.id);
+      updateComposerDraft((current) => ({ ...current, sending: false }));
+    }
+  }
+
+  async function chooseAttachments() {
+    const selected = await window.runtaCrew?.attachments.choose() ?? [];
+    if (!selected.length) return;
+    setAttachments((current) => {
+      const added = selected
+        .filter((next) => !current.some((item) => item.id === next.id))
+        .map((item) => ({ ...item, source: "local-selection" as const }));
+      return [...current, ...added].slice(0, 8);
+    });
+  }
+
   async function pasteImages(files: File[]) {
     const available = Math.max(0, 8 - attachments.length); if (!available || !window.runtaCrew) return;
     const selected = await Promise.all(files.slice(0, available).map(async (file, index) => {
@@ -110,6 +164,9 @@ export function Conversation({ agent, messages, activities, loading = false, foc
   return <main className="conversation">
     <header className={`conversation-header ${isScrolled ? "scrolled" : ""}`}><h1>{agent.name}</h1><div className="header-actions"><button className="computer-trigger" aria-label="Open agent computer" onClick={onToggleDetails}><Monitor size={18} /></button></div></header>
     <div className="conversation-scroll-shell">{loading ? <div className="conversation-skeleton" role="status" aria-label="Loading conversation history"><div className="skeleton-message skeleton-agent"><span className="skeleton-line skeleton-line-wide" /><span className="skeleton-line" /></div><div className="skeleton-message skeleton-user"><span className="skeleton-bubble" /></div><div className="skeleton-message skeleton-agent"><span className="skeleton-line skeleton-line-short" /></div></div> : <><div className={`message-scroll ${scrollbarVisible ? "scrollbar-visible" : ""}`} ref={scrollRef} onWheelCapture={(event) => { if (event.deltaY < 0) programmaticScrollRef.current = false; }} onScroll={(event) => { const element = event.currentTarget; const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight; const atBottom = distanceFromBottom <= 24; const scrollingUp = element.scrollTop < lastScrollTopRef.current - 1; lastScrollTopRef.current = element.scrollTop; setIsScrolled(element.scrollTop > 0); if (scrollingUp && distanceFromBottom > 72) { programmaticScrollRef.current = false; pinnedToBottomRef.current = false; setShowScrollToBottom(true); } else if (!programmaticScrollRef.current && atBottom) { pinnedToBottomRef.current = true; setShowScrollToBottom(false); } else if (!programmaticScrollRef.current && distanceFromBottom > 72) { pinnedToBottomRef.current = false; setShowScrollToBottom(true); } revealScrollbarBriefly(); }} onPointerMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); if (bounds.right - event.clientX <= 14) setScrollbarVisible(true); else if (!scrollHideTimer.current) setScrollbarVisible(false); }} onPointerLeave={() => setScrollbarVisible(false)}><div className="message-content" ref={contentRef}>{messages.length === 0 && <div className="conversation-intro"><AgentAvatar agent={agent} size={54} /><h2>{agent.name}</h2></div>}{messages.map((message) => <MessageView key={message.id} message={message} agent={agent} activities={activities} entering={enteringMessageIds.has(message.id) || message.id.startsWith("optimistic-user:")} />)}</div></div>{showScrollToBottom && <button type="button" className="scroll-to-bottom" aria-label="Scroll to latest message" onClick={() => scrollToBottom("smooth")}><ArrowDown size={20} /></button>}</>}</div>
-    <form className="composer" onSubmit={submit}>{attachments.length > 0 && <div className="composer-attachments"><AttachmentCards attachments={attachments} onRemove={(id) => setAttachments((current) => current.filter((item) => item.id !== id))} /></div>}<textarea ref={composerRef} aria-label={`Message ${agent.name}`} placeholder={`Message ${agent.name}…`} value={draft} onChange={(event) => setDraft(event.target.value)} onPaste={(event) => { const itemImages = Array.from(event.clipboardData.items).flatMap((item) => item.kind === "file" && /^image\/(?:gif|jpeg|png|webp)$/i.test(item.type) ? [item.getAsFile()].filter((file): file is File => file !== null) : []); const fileImages = Array.from(event.clipboardData.files).filter((file) => /^image\/(?:gif|jpeg|png|webp)$/i.test(file.type)); const images = itemImages.length ? itemImages : fileImages; if (images.length) { event.preventDefault(); void pasteImages(images); } }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div className="composer-bottom"><button type="button" className="attach-button" aria-label="Attach files" onClick={() => void chooseAttachments()}><Paperclip size={15} /></button><button className="submit-button" data-state={sending ? "stopping" : "send"} aria-label={sending ? "Stop generating" : "Send message"} disabled={(!draft.trim() && attachments.length === 0) || sending}>{sending ? <StopIcon /> : <SubmitArrowIcon />}</button></div></form>
+    <form className="composer" onSubmit={submit}>{attachments.length > 0 && <div className="composer-attachments"><AttachmentCards attachments={attachments} onRemove={(id) => setAttachments((current) => current.filter((item) => item.id !== id))} /></div>}<textarea ref={composerRef} aria-label={`Message ${agent.name}`} placeholder={`Message ${agent.name}…`} value={draft} onChange={(event) => {
+      const text = event.target.value;
+      updateComposerDraft((current) => ({ ...current, text }));
+    }} onPaste={(event) => { const itemImages = Array.from(event.clipboardData.items).flatMap((item) => item.kind === "file" && /^image\/(?:gif|jpeg|png|webp)$/i.test(item.type) ? [item.getAsFile()].filter((file): file is File => file !== null) : []); const fileImages = Array.from(event.clipboardData.files).filter((file) => /^image\/(?:gif|jpeg|png|webp)$/i.test(file.type)); const images = itemImages.length ? itemImages : fileImages; if (images.length) { event.preventDefault(); void pasteImages(images); } }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div className="composer-bottom"><button type="button" className="attach-button" aria-label="Attach files" onClick={() => void chooseAttachments()}><Paperclip size={15} /></button><button className="submit-button" data-state={sending ? "stopping" : "send"} aria-label={sending ? "Stop generating" : "Send message"} disabled={(!draft.trim() && attachments.length === 0) || sending}>{sending ? <StopIcon /> : <SubmitArrowIcon />}</button></div></form>
   </main>;
 }

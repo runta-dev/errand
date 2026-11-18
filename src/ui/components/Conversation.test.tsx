@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Agent, Message } from "@/domain/types";
+import type { SelectedAttachment } from "@/shared/desktop";
 import { Conversation, MessageView } from "./Conversation";
 
 const agent: Agent = { id: "atlas", name: "Atlas", role: "Researcher", goal: "Find the signal", status: "idle", avatar: "A", lastActiveAt: new Date().toISOString(), unreadCount: 0, computerId: "computer-atlas" };
@@ -63,6 +64,71 @@ describe("Conversation states", () => {
     render(<Conversation agent={agent} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />);
     expect(screen.getByRole("heading", { name: "Atlas", level: 2 })).toBeInTheDocument();
     expect(screen.queryByText("Find the signal")).not.toBeInTheDocument();
+  });
+
+  it("keeps unsent text and attachments with the agent that received the draft", async () => {
+    const nextAgent = { ...agent, id: "mira", name: "Mira" };
+    const file: SelectedAttachment = { id: "atlas-draft-file", name: "atlas-notes.txt", size: 13, mediaType: "text/plain" };
+    const choose = vi.fn(async () => [file]);
+    window.runtaCrew = { attachments: { choose } } as unknown as typeof window.runtaCrew;
+    const onSend = vi.fn(async () => undefined);
+    const view = (current: Agent) => <Conversation agent={current} messages={[]} activities={[]} onSend={onSend} onToggleDetails={() => undefined} />;
+    const { rerender } = render(view(agent));
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Atlas" }), { target: { value: "Atlas draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+    await screen.findByText("atlas-notes.txt");
+
+    rerender(view(nextAgent));
+    expect(screen.getByRole("textbox", { name: "Message Mira" })).toHaveValue("");
+    expect(screen.queryByText("atlas-notes.txt")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Mira" }), { target: { value: "Mira draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith("Mira draft", []));
+
+    rerender(view(agent));
+    expect(screen.getByRole("textbox", { name: "Message Atlas" })).toHaveValue("Atlas draft");
+    expect(screen.getByText("atlas-notes.txt")).toBeInTheDocument();
+  });
+
+  it("adds a late file selection to its originating draft after an agent switch", async () => {
+    const nextAgent = { ...agent, id: "mira", name: "Mira" };
+    let resolveSelection!: (files: SelectedAttachment[]) => void;
+    const choose = vi.fn(() => new Promise<SelectedAttachment[]>((resolve) => { resolveSelection = resolve; }));
+    window.runtaCrew = { attachments: { choose } } as unknown as typeof window.runtaCrew;
+    const view = (current: Agent) => <Conversation agent={current} messages={[]} activities={[]} onSend={async () => undefined} onToggleDetails={() => undefined} />;
+    const { rerender } = render(view(agent));
+    fireEvent.click(screen.getByRole("button", { name: "Attach files" }));
+    expect(choose).toHaveBeenCalledOnce();
+
+    rerender(view(nextAgent));
+    await act(async () => {
+      resolveSelection([{ id: "late-file", name: "late-notes.txt", size: 13, mediaType: "text/plain" }]);
+    });
+    expect(screen.queryByText("late-notes.txt")).not.toBeInTheDocument();
+
+    rerender(view(agent));
+    expect(screen.getByText("late-notes.txt")).toBeInTheDocument();
+  });
+
+  it("allows another agent's draft to be sent while a different send is pending", async () => {
+    const nextAgent = { ...agent, id: "mira", name: "Mira" };
+    let finishAtlas!: () => void;
+    const sendAtlas = vi.fn(() => new Promise<void>((resolve) => { finishAtlas = resolve; }));
+    const sendMira = vi.fn(async () => undefined);
+    const view = (current: Agent) => <Conversation agent={current} messages={[]} activities={[]} onSend={current.id === agent.id ? sendAtlas : sendMira} onToggleDetails={() => undefined} />;
+    const { rerender } = render(view(agent));
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Atlas" }), { target: { value: "Atlas task" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(sendAtlas).toHaveBeenCalledWith("Atlas task", []);
+
+    rerender(view(nextAgent));
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Mira" }), { target: { value: "Mira task" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(sendMira).toHaveBeenCalledWith("Mira task", []));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Mira" }), { target: { value: "New Mira draft" } });
+    await act(async () => finishAtlas());
+    expect(screen.getByRole("textbox", { name: "Message Mira" })).toHaveValue("New Mira draft");
   });
 
   it("shows a skeleton instead of the empty conversation while history loads", () => {
