@@ -57,6 +57,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+      # Fennec Terminal (desktop/, GPUI) ships in every release: Rust builds it
+      # and Zig 0.16 builds its libghostty-vt.
+      - name: Install Rust
+        run: |
+          set -eu
+          command -v rustup >/dev/null || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo --version
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
       - name: Verify source
         run: |
           make check
